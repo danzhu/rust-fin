@@ -1,0 +1,6 @@
+[package]
+name = "fin"
+version = "0.1.0"
+authors = ["Daniel Zhu <danzhu24@hotmail.com>"]
+
+[dependencies]
