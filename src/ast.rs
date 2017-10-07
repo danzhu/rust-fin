@@ -1,3 +1,5 @@
+use operator::Op;
+
 pub struct Module {
     pub functions: Vec<Func>,
 }
@@ -10,16 +12,8 @@ pub struct Func {
 pub enum Expr {
     Int(i32),
     Binary {
-        op: BinOp,
+        op: Op,
         left: Box<Expr>,
         right: Box<Expr>,
     },
-}
-
-pub enum BinOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
 }

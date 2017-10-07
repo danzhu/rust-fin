@@ -1,5 +1,6 @@
 use std::io;
-use ast::{Module, Func, Expr, BinOp};
+use ast::{Module, Func, Expr};
+use operator::Op;
 
 type Error<T> = Result<T, io::Error>;
 
@@ -42,11 +43,11 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
 
                 let reg = self.reg();
                 let op = match op {
-                    &BinOp::Add => "add",
-                    &BinOp::Sub => "sub",
-                    &BinOp::Mul => "mul",
-                    &BinOp::Div => "sdiv",
-                    &BinOp::Rem => "srem",
+                    &Op::Add => "add",
+                    &Op::Sub => "sub",
+                    &Op::Mul => "mul",
+                    &Op::Div => "sdiv",
+                    &Op::Rem => "srem",
                 };
 
                 writeln!(self.writer, "  {} = {} i32 {}, {}", reg, op, left, right)?;
