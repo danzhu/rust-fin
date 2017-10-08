@@ -1,23 +1,24 @@
 use std::str;
 use std::iter;
 
-use operator::Op;
+use ast::{Op, Paren};
 
 #[derive(Debug)]
 pub enum Token {
-    Lparen,
-    Rparen,
-    Operator(Op),
-    Int(i32),
+    Def,
     Id(String),
+    Int(i32),
+    Open(Paren),
+    Close(Paren),
+    Operator(Op),
 }
 
-pub struct Lexer<'a> {
-    source: iter::Peekable<str::Chars<'a>>,
+pub struct Lexer<Iter: Iterator<Item=char>> {
+    source: iter::Peekable<Iter>,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(source: str::Chars<'a>) -> Lexer<'a> {
+impl<Iter: Iterator<Item=char>> Lexer<Iter> {
+    pub fn new(source: Iter) -> Lexer<Iter> {
         Lexer {
             source: source.peekable(),
         }
@@ -36,9 +37,10 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl<'a> Iterator for Lexer<'a> {
+impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
     type Item = Token;
 
+    // TODO: error handling
     fn next(&mut self) -> Option<Token> {
         let ch = match self.source.peek() {
             Some(&ch) => ch,
@@ -47,25 +49,42 @@ impl<'a> Iterator for Lexer<'a> {
 
         if ch.is_whitespace() {
             self.source.next();
-            self.next()
-        } else if ch.is_alphabetic() {
-            Some(Token::Id(self.take_while(|c| c.is_alphanumeric())))
+            return self.next();
+        }
+
+        let tok = if ch.is_alphabetic() {
+            // id
+            let id = self.take_while(|c| c.is_alphanumeric());
+
+            if id == "def" {
+                Token::Def
+            } else {
+                Token::Id(id)
+            }
         } else if ch.is_numeric() {
-            Some(Token::Int(self.take_while(|c| c.is_numeric())
-                            .parse()
-                            .expect("failed to parse integer")))
+            // int
+            Token::Int(self.take_while(|c| c.is_numeric())
+                       .parse()
+                       .expect("failed to parse integer"))
         } else {
+            // single character tokens
             self.source.next();
             match ch {
-                '(' => Some(Token::Lparen),
-                ')' => Some(Token::Rparen),
-                '+' => Some(Token::Operator(Op::Add)),
-                '-' => Some(Token::Operator(Op::Sub)),
-                '*' => Some(Token::Operator(Op::Mul)),
-                '/' => Some(Token::Operator(Op::Div)),
-                '%' => Some(Token::Operator(Op::Rem)),
+                '(' => Token::Open(Paren::Paren),
+                ')' => Token::Close(Paren::Paren),
+                '[' => Token::Open(Paren::Bracket),
+                ']' => Token::Close(Paren::Bracket),
+                '{' => Token::Open(Paren::Brace),
+                '}' => Token::Close(Paren::Brace),
+                '+' => Token::Operator(Op::Add),
+                '-' => Token::Operator(Op::Sub),
+                '*' => Token::Operator(Op::Mul),
+                '/' => Token::Operator(Op::Div),
+                '%' => Token::Operator(Op::Rem),
                 _ => panic!("unrecognized character"),
             }
-        }
+        };
+
+        Some(tok)
     }
 }

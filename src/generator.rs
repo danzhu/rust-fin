@@ -1,6 +1,5 @@
 use std::io;
-use ast::{Module, Func, Expr};
-use operator::Op;
+use ast::{Module, Func, Expr, Op};
 
 type Error<T> = Result<T, io::Error>;
 

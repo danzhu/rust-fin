@@ -1,10 +1,9 @@
 use std::iter;
 
-use ast::{Module, Func, Expr};
+use ast::{Module, Func, Expr, Op, Paren};
 use lexer::Token;
-use operator::Op;
 
-type Error<T> = Result<T, String>;
+type Error<T> = Result<T, &'static str>;
 
 pub struct Parser<T: Iterator<Item=Token>> {
     source: iter::Peekable<T>,
@@ -31,47 +30,54 @@ impl<T: Iterator<Item=Token>> Parser<T> {
     }
 
     fn expr(&mut self) -> Error<Expr> {
-        let mut expr = self.term()?;
+        let mut res = self.term()?;
         while let Some(&Token::Operator(op)) = self.source.peek() {
             match op {
                 Op::Add | Op::Sub => {
                     self.source.next();
                     let right = self.term()?;
-                    expr = Expr::Binary {
+                    res = Expr::Binary {
                         op,
-                        left: Box::new(expr),
+                        left: Box::new(res),
                         right: Box::new(right),
                     }
                 },
                 _ => break,
             }
         }
-        Ok(expr)
+        Ok(res)
     }
 
     fn term(&mut self) -> Error<Expr> {
-        let mut expr = self.factor()?;
+        let mut res = self.factor()?;
         while let Some(&Token::Operator(op)) = self.source.peek() {
             match op {
                 Op::Mul | Op::Div | Op::Rem => {
                     self.source.next();
                     let right = self.factor()?;
-                    expr = Expr::Binary {
+                    res = Expr::Binary {
                         op,
-                        left: Box::new(expr),
+                        left: Box::new(res),
                         right: Box::new(right),
                     }
                 },
                 _ => break,
             }
         }
-        Ok(expr)
+        Ok(res)
     }
 
     fn factor(&mut self) -> Error<Expr> {
         match self.source.next() {
             Some(Token::Int(val)) => Ok(Expr::Int(val)),
-            _ => Err("expect integer literal".to_string())
+            Some(Token::Open(Paren::Paren)) => {
+                let res = self.expr()?;
+                match self.source.next() {
+                    Some(Token::Close(Paren::Paren)) => Ok(res),
+                    _ => Err("expect closing parenthesis"),
+                }
+            }
+            _ => Err("expect integer literal")
         }
     }
 }
