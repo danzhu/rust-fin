@@ -3,6 +3,15 @@ use std::iter;
 use ast::{Module, Func, Expr, Op, Paren};
 use lexer::Token;
 
+macro_rules! expect {
+    ($src:expr, $pat:pat, $res:expr) => (
+        match $src.next() {
+            Some($pat) => $res,
+            _ => return Err(concat!("expect ", stringify!($pat))),
+        }
+    )
+}
+
 type Error<T> = Result<T, &'static str>;
 
 pub struct Parser<T: Iterator<Item=Token>> {
@@ -17,16 +26,49 @@ impl<T: Iterator<Item=Token>> Parser<T> {
     }
 
     pub fn parse(&mut self) -> Error<Module> {
-        Ok(Module {
-            functions: vec![self.func()?],
-        })
+        let mut functions = Vec::new();
+        while self.source.peek().is_some() {
+            functions.push(self.func()?);
+        }
+        Ok(Module { functions })
     }
 
     fn func(&mut self) -> Error<Func> {
-        Ok(Func {
-            name: "main".to_string(),
-            expr: self.expr()?,
-        })
+        expect!(self.source, Token::Def, {});
+
+        let name = expect!(self.source, Token::Id(name), name);
+
+        expect!(self.source, Token::Open(Paren::Paren), {});
+        expect!(self.source, Token::Close(Paren::Paren), {});
+        expect!(self.source, Token::As, {});
+
+        let expr = self.block()?;
+
+        Ok(Func { name, expr })
+    }
+
+    fn block(&mut self) -> Error<Expr> {
+        expect!(self.source, Token::Indent, {});
+
+        let mut exprs = Vec::new();
+
+        loop {
+            match self.source.peek() {
+                Some(&Token::Dedent) => break,
+                None => panic!("no matching dedent"),
+                _ => exprs.push(self.statement()?),
+            }
+        }
+
+        expect!(self.source, Token::Dedent, {});
+
+        Ok(Expr::Block { exprs })
+    }
+
+    fn statement(&mut self) -> Error<Expr> {
+        let expr = self.expr()?;
+        expect!(self.source, Token::Newline, {});
+        Ok(expr)
     }
 
     fn expr(&mut self) -> Error<Expr> {
@@ -72,12 +114,10 @@ impl<T: Iterator<Item=Token>> Parser<T> {
             Some(Token::Int(val)) => Ok(Expr::Int(val)),
             Some(Token::Open(Paren::Paren)) => {
                 let res = self.expr()?;
-                match self.source.next() {
-                    Some(Token::Close(Paren::Paren)) => Ok(res),
-                    _ => Err("expect closing parenthesis"),
-                }
+                expect!(self.source, Token::Close(Paren::Paren), {});
+                Ok(res)
             }
-            _ => Err("expect integer literal")
+            _ => Err("expect integer literal or open parenthesis")
         }
     }
 }

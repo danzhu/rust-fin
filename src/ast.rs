@@ -24,10 +24,13 @@ pub struct Func {
 }
 
 pub enum Expr {
-    Int(i32),
+    Block {
+        exprs: Vec<Expr>,
+    },
     Binary {
         op: Op,
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    Int(i32),
 }

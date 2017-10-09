@@ -33,8 +33,12 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
 
     fn expr(&mut self, expr: &Expr) -> Error<String> {
         match expr {
-            &Expr::Int(value) => {
-                Ok(format!("{}", value))
+            &Expr::Block { ref exprs } => {
+                // TODO: verify that at least one expr exists
+                for expr in exprs.iter().take(exprs.len() - 1) {
+                    self.expr(expr)?;
+                }
+                Ok(self.expr(exprs.last().unwrap())?)
             },
             &Expr::Binary { ref op, ref left, ref right } => {
                 let left = self.expr(&*left)?;
@@ -51,6 +55,9 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
 
                 writeln!(self.writer, "  {} = {} i32 {}, {}", reg, op, left, right)?;
                 Ok(reg)
+            },
+            &Expr::Int(value) => {
+                Ok(format!("{}", value))
             },
         }
     }
