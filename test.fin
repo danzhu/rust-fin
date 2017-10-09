@@ -2,8 +2,7 @@ def add(i, j) as
     i + j
 
 def main() as
-    3 * 4
-    1 + 2
+    2 * add(2, 3)
 
 # list.filter item by
 #     item.value > 0

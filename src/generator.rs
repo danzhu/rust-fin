@@ -67,17 +67,18 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
                 writeln!(self.writer, "  {} = {} i32 {}, {}", reg, op, left, right)?;
                 Ok(reg)
             },
-            &ExprKind::Call { name: ref _name, args: ref _args } => {
-                unimplemented!();
-                // let reg = self.reg();
+            &ExprKind::Call { ref name, ref args } => {
+                let reg = self.reg();
 
-                // writeln!(self.writer, "  {} = call {} @{}({})",
-                //     reg,
-                //     self.signature(func),
-                //     name,
-                //     args);
+                let mut arg_values = Vec::new();
+                for arg in args {
+                    arg_values.push(format!("i32 {}", self.expr(arg)?));
+                }
+                let args = arg_values.join(", ");
 
-                // Ok(reg)
+                writeln!(self.writer, "  {} = call i32 @{}({})", reg, name, args)?;
+
+                Ok(reg)
             },
             &ExprKind::Int(value) => {
                 Ok(format!("{}", value))
