@@ -23,7 +23,11 @@ pub struct Func {
     pub expr: Expr,
 }
 
-pub enum Expr {
+pub struct Expr {
+    kind: ExprKind,
+}
+
+pub enum ExprKind {
     Block {
         exprs: Vec<Expr>,
     },
@@ -33,4 +37,14 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Int(i32),
+}
+
+impl Expr {
+    pub fn new(kind: ExprKind) -> Expr {
+        Expr { kind }
+    }
+
+    pub fn kind(&self) -> &ExprKind {
+        &self.kind
+    }
 }

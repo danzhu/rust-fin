@@ -1,5 +1,5 @@
 use std::io;
-use ast::{Module, Func, Expr, Op};
+use ast::{Module, Func, Expr, ExprKind, Op};
 
 type Error<T> = Result<T, io::Error>;
 
@@ -32,15 +32,15 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
     }
 
     fn expr(&mut self, expr: &Expr) -> Error<String> {
-        match expr {
-            &Expr::Block { ref exprs } => {
+        match expr.kind() {
+            &ExprKind::Block { ref exprs } => {
                 // TODO: verify that at least one expr exists
                 for expr in exprs.iter().take(exprs.len() - 1) {
                     self.expr(expr)?;
                 }
                 Ok(self.expr(exprs.last().unwrap())?)
             },
-            &Expr::Binary { ref op, ref left, ref right } => {
+            &ExprKind::Binary { ref op, ref left, ref right } => {
                 let left = self.expr(&*left)?;
                 let right = self.expr(&*right)?;
 
@@ -56,7 +56,7 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
                 writeln!(self.writer, "  {} = {} i32 {}, {}", reg, op, left, right)?;
                 Ok(reg)
             },
-            &Expr::Int(value) => {
+            &ExprKind::Int(value) => {
                 Ok(format!("{}", value))
             },
         }

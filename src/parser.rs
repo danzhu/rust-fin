@@ -1,6 +1,6 @@
 use std::iter;
 
-use ast::{Module, Func, Expr, Op, Paren};
+use ast::{Module, Func, Expr, ExprKind, Op, Paren};
 use lexer::Token;
 
 macro_rules! expect {
@@ -62,7 +62,7 @@ impl<T: Iterator<Item=Token>> Parser<T> {
 
         expect!(self.source, Token::Dedent, {});
 
-        Ok(Expr::Block { exprs })
+        Ok(Expr::new(ExprKind::Block { exprs }))
     }
 
     fn statement(&mut self) -> Error<Expr> {
@@ -78,11 +78,11 @@ impl<T: Iterator<Item=Token>> Parser<T> {
                 Op::Add | Op::Sub => {
                     self.source.next();
                     let right = self.term()?;
-                    res = Expr::Binary {
+                    res = Expr::new(ExprKind::Binary {
                         op,
                         left: Box::new(res),
                         right: Box::new(right),
-                    }
+                    })
                 },
                 _ => break,
             }
@@ -97,11 +97,11 @@ impl<T: Iterator<Item=Token>> Parser<T> {
                 Op::Mul | Op::Div | Op::Rem => {
                     self.source.next();
                     let right = self.factor()?;
-                    res = Expr::Binary {
+                    res = Expr::new(ExprKind::Binary {
                         op,
                         left: Box::new(res),
                         right: Box::new(right),
-                    }
+                    })
                 },
                 _ => break,
             }
@@ -111,7 +111,7 @@ impl<T: Iterator<Item=Token>> Parser<T> {
 
     fn factor(&mut self) -> Error<Expr> {
         match self.source.next() {
-            Some(Token::Int(val)) => Ok(Expr::Int(val)),
+            Some(Token::Int(val)) => Ok(Expr::new(ExprKind::Int(val))),
             Some(Token::Open(Paren::Paren)) => {
                 let res = self.expr()?;
                 expect!(self.source, Token::Close(Paren::Paren), {});
