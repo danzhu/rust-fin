@@ -1,3 +1,6 @@
+def add(i, j) as
+    i + j
+
 def main() as
     3 * 4
     1 + 2

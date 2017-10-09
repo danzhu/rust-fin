@@ -1,4 +1,5 @@
 use std::io;
+
 use ast::{Module, Func, Expr, ExprKind, Op};
 
 type Error<T> = Result<T, io::Error>;
@@ -12,7 +13,7 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
     pub fn new(writer: &mut Writer) -> Generator<Writer> {
         Generator {
             writer,
-            reg_id: 1,
+            reg_id: 0,
         }
     }
 
@@ -24,10 +25,20 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
     }
 
     fn function(&mut self, func: &Func) -> Error<()> {
-        writeln!(self.writer, "define i32 @{}() {{", func.name)?;
-        let ret = self.expr(&func.expr)?;
+        self.reg_id = 1;
+
+        let params = func.params.iter()
+            .map(|p| format!("i32 %{}", p.name))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        writeln!(self.writer, "define i32 @{}({}) {{", func.name, params)?;
+
+        let ret = self.expr(&func.body)?;
+
         writeln!(self.writer, "  ret i32 {}", ret)?;
         writeln!(self.writer, "}}")?;
+
         Ok(())
     }
 
@@ -40,24 +51,39 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
                 }
                 Ok(self.expr(exprs.last().unwrap())?)
             },
-            &ExprKind::Binary { ref op, ref left, ref right } => {
-                let left = self.expr(&*left)?;
-                let right = self.expr(&*right)?;
+            &ExprKind::Binary { op, ref left, ref right } => {
+                let left = self.expr(left)?;
+                let right = self.expr(right)?;
 
                 let reg = self.reg();
                 let op = match op {
-                    &Op::Add => "add",
-                    &Op::Sub => "sub",
-                    &Op::Mul => "mul",
-                    &Op::Div => "sdiv",
-                    &Op::Rem => "srem",
+                    Op::Add => "add",
+                    Op::Sub => "sub",
+                    Op::Mul => "mul",
+                    Op::Div => "sdiv",
+                    Op::Rem => "srem",
                 };
 
                 writeln!(self.writer, "  {} = {} i32 {}, {}", reg, op, left, right)?;
                 Ok(reg)
             },
+            &ExprKind::Call { name: ref _name, args: ref _args } => {
+                unimplemented!();
+                // let reg = self.reg();
+
+                // writeln!(self.writer, "  {} = call {} @{}({})",
+                //     reg,
+                //     self.signature(func),
+                //     name,
+                //     args);
+
+                // Ok(reg)
+            },
             &ExprKind::Int(value) => {
                 Ok(format!("{}", value))
+            },
+            &ExprKind::Id(ref name) => {
+                Ok(format!("%{}", name))
             },
         }
     }

@@ -10,6 +10,7 @@ pub enum Token {
     Indent,
     Dedent,
     Newline,
+    Comma,
     Id(String),
     Int(i32),
     Open(Paren),
@@ -145,6 +146,7 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
             // single character tokens
             self.source.next();
             match ch {
+                ',' => Token::Comma,
                 '(' => Token::Open(Paren::Paren),
                 ')' => Token::Close(Paren::Paren),
                 '[' => Token::Open(Paren::Bracket),

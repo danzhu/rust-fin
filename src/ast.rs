@@ -14,13 +14,18 @@ pub enum Paren {
     Brace,
 }
 
+pub struct Decl {
+    pub name: String,
+}
+
 pub struct Module {
     pub functions: Vec<Func>,
 }
 
 pub struct Func {
     pub name: String,
-    pub expr: Expr,
+    pub params: Vec<Decl>,
+    pub body: Expr,
 }
 
 pub struct Expr {
@@ -36,7 +41,12 @@ pub enum ExprKind {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
     Int(i32),
+    Id(String),
 }
 
 impl Expr {
