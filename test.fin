@@ -1,8 +1,10 @@
-def add(i, j) as
-    i + j
+def test(a, b) as
+    let sum = a + b
+    sum * sum
 
 def main() as
-    2 * add(2, 3)
+    let i = 2
+    i * test(i, 3)
 
 # list.filter item by
 #     item.value > 0

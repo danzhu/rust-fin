@@ -36,6 +36,10 @@ pub enum ExprKind {
     Block {
         exprs: Vec<Expr>,
     },
+    Let {
+        var: String,
+        value: Box<Expr>,
+    },
     Binary {
         op: Op,
         left: Box<Expr>,

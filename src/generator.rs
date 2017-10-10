@@ -51,11 +51,18 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
                 }
                 Ok(self.expr(exprs.last().unwrap())?)
             },
+            &ExprKind::Let { ref var, ref value } => {
+                let reg = format!("%{}", var);
+                let value = self.expr(value)?;
+
+                writeln!(self.writer, "  {} = add i32 {}, 0", reg, value)?;
+                Ok(reg)
+            },
             &ExprKind::Binary { op, ref left, ref right } => {
                 let left = self.expr(left)?;
                 let right = self.expr(right)?;
 
-                let reg = self.reg();
+                let reg = self.temp();
                 let op = match op {
                     Op::Add => "add",
                     Op::Sub => "sub",
@@ -68,7 +75,7 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
                 Ok(reg)
             },
             &ExprKind::Call { ref name, ref args } => {
-                let reg = self.reg();
+                let reg = self.temp();
 
                 let mut arg_values = Vec::new();
                 for arg in args {
@@ -89,7 +96,7 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
         }
     }
 
-    fn reg(&mut self) -> String {
+    fn temp(&mut self) -> String {
         let res = format!("%{}", self.reg_id);
         self.reg_id += 1;
         res

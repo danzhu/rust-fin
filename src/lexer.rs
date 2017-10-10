@@ -7,9 +7,11 @@ use ast::{Op, Paren};
 pub enum Token {
     Def,
     As,
+    Let,
     Indent,
     Dedent,
     Newline,
+    Equal,
     Comma,
     Id(String),
     Int(i32),
@@ -134,6 +136,8 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
                 Token::Def
             } else if id == "as" {
                 Token::As
+            } else if id == "let" {
+                Token::Let
             } else {
                 Token::Id(id)
             }
@@ -146,6 +150,7 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
             // single character tokens
             self.source.next();
             match ch {
+                '=' => Token::Equal,
                 ',' => Token::Comma,
                 '(' => Token::Open(Paren::Paren),
                 ')' => Token::Close(Paren::Paren),

@@ -50,10 +50,9 @@ impl<T: Iterator<Item=Token>> Parser<T> {
             self.source.next();
         } else {
             loop {
-                let param = Decl {
-                    name: expect!(self.source, Token::Id(name), name)
-                };
-                params.push(param);
+                let name = expect!(self.source, Token::Id(name), name);
+                params.push(Decl { name });
+
                 match self.source.next() {
                     Some(Token::Close(Paren::Paren)) => break,
                     Some(Token::Comma) => {},
@@ -87,7 +86,16 @@ impl<T: Iterator<Item=Token>> Parser<T> {
     }
 
     fn statement(&mut self) -> Error<Expr> {
-        let expr = self.expr()?;
+        let expr = match self.source.peek() {
+            Some(&Token::Let) => {
+                self.source.next();
+                let var = expect!(self.source, Token::Id(name), name);
+                expect!(self.source, Token::Equal);
+                let value = self.expr()?;
+                Expr::new(ExprKind::Let { var, value: Box::new(value) })
+            },
+            _ => self.expr()?,
+        };
         expect!(self.source, Token::Newline);
         Ok(expr)
     }
