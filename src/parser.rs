@@ -2,17 +2,20 @@ use std::iter;
 
 use ast::{Module, Func, Expr, ExprKind, Op, Paren, Decl};
 use lexer::Token;
+use util::*;
 
 macro_rules! expect {
     ($src:expr, $pat:pat, $res:expr) => (
         match $src.next() {
-            Some($pat) => $res,
+            Some(Ok($pat)) => $res,
+            Some(Err(err)) => return Err(err),
             _ => return Err(concat!("expect ", stringify!($pat))),
         }
     );
     ($src:expr, $pat:pat) => (
         match $src.next() {
-            Some($pat) => {},
+            Some(Ok($pat)) => {},
+            Some(Err(err)) => return Err(err),
             _ => return Err(concat!("expect ", stringify!($pat))),
         }
     );
@@ -20,11 +23,11 @@ macro_rules! expect {
 
 type Error<T> = Result<T, &'static str>;
 
-pub struct Parser<T: Iterator<Item=Token>> {
+pub struct Parser<T: Iterator<Item=Result<Token, &'static str>>> {
     source: iter::Peekable<T>,
 }
 
-impl<T: Iterator<Item=Token>> Parser<T> {
+impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
     pub fn new(source: T) -> Parser<T> {
         Parser {
             source: source.peekable(),
@@ -45,7 +48,7 @@ impl<T: Iterator<Item=Token>> Parser<T> {
 
         expect!(self.source, Token::Open(Paren::Paren));
         let mut params = Vec::new();
-        if let Some(&Token::Close(Paren::Paren)) = self.source.peek() {
+        if let Some(&Token::Close(Paren::Paren)) = self.source.try_peek()? {
             // no params
             self.source.next();
         } else {
@@ -53,7 +56,7 @@ impl<T: Iterator<Item=Token>> Parser<T> {
                 let name = expect!(self.source, Token::Id(name), name);
                 params.push(Decl { name });
 
-                match self.source.next() {
+                match self.source.try_next()? {
                     Some(Token::Close(Paren::Paren)) => break,
                     Some(Token::Comma) => {},
                     _ => return Err("expect closing parenthesis or comma"),
@@ -73,7 +76,7 @@ impl<T: Iterator<Item=Token>> Parser<T> {
 
         let mut exprs = Vec::new();
         loop {
-            match self.source.peek() {
+            match self.source.try_peek()? {
                 Some(&Token::Dedent) => break,
                 None => panic!("no matching dedent"),
                 _ => exprs.push(self.statement()?),
@@ -86,7 +89,7 @@ impl<T: Iterator<Item=Token>> Parser<T> {
     }
 
     fn statement(&mut self) -> Error<Expr> {
-        let expr = match self.source.peek() {
+        let expr = match self.source.try_peek()? {
             Some(&Token::Let) => {
                 self.source.next();
                 let var = expect!(self.source, Token::Id(name), name);
@@ -102,7 +105,7 @@ impl<T: Iterator<Item=Token>> Parser<T> {
 
     fn expr(&mut self) -> Error<Expr> {
         let mut res = self.term()?;
-        while let Some(&Token::Operator(op)) = self.source.peek() {
+        while let Some(&Token::Operator(op)) = self.source.try_peek()? {
             match op {
                 Op::Add | Op::Sub => {
                     self.source.next();
@@ -121,7 +124,7 @@ impl<T: Iterator<Item=Token>> Parser<T> {
 
     fn term(&mut self) -> Error<Expr> {
         let mut res = self.factor()?;
-        while let Some(&Token::Operator(op)) = self.source.peek() {
+        while let Some(&Token::Operator(op)) = self.source.try_peek()? {
             match op {
                 Op::Mul | Op::Div | Op::Rem => {
                     self.source.next();
@@ -139,20 +142,20 @@ impl<T: Iterator<Item=Token>> Parser<T> {
     }
 
     fn factor(&mut self) -> Error<Expr> {
-        match self.source.next() {
+        match self.source.try_next()? {
             Some(Token::Id(name)) => {
-                if let Some(&Token::Open(Paren::Paren)) = self.source.peek() {
+                if let Some(&Token::Open(Paren::Paren)) = self.source.try_peek()? {
                     // function call
                     self.source.next();
 
                     let mut args = Vec::new();
-                    if let Some(&Token::Close(Paren::Paren)) = self.source.peek() {
+                    if let Some(&Token::Close(Paren::Paren)) = self.source.try_peek()? {
                         // no params
                         self.source.next();
                     } else {
                         loop {
                             args.push(self.expr()?);
-                            match self.source.next() {
+                            match self.source.try_next()? {
                                 Some(Token::Close(Paren::Paren)) => break,
                                 Some(Token::Comma) => {},
                                 _ => return Err("expect closing parenthesis or comma"),

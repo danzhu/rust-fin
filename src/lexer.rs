@@ -20,6 +20,14 @@ pub enum Token {
     Operator(Op),
 }
 
+pub enum LexerError {
+    Indent,
+    IntegerOverflow,
+    UnknownCharacter,
+}
+
+type LexerResult<T> = Result<T, LexerError>;
+
 pub struct Lexer<Iter: Iterator<Item=char>> {
     source: iter::Peekable<Iter>,
     indents: Vec<usize>,
@@ -49,23 +57,23 @@ impl<Iter: Iterator<Item=char>> Lexer<Iter> {
 }
 
 impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
-    type Item = Token;
+    type Item = LexerResult<Token>;
 
-    // TODO: error handling
-    fn next(&mut self) -> Option<Token> {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.dedents > 0 {
             self.dedents -= 1;
-            return Some(Token::Dedent);
+            return Some(Ok(Token::Dedent));
         }
 
         let ch = match self.source.peek() {
             Some(&ch) => ch,
-            None => if self.indents.len() > 1 {
+            None => return if self.indents.len() > 1 {
+                // cleanup previous indents
                 self.dedents = self.indents.len() - 1;
                 self.indents = vec![0];
-                return self.next();
+                self.next()
             } else {
-                return None;
+                None
             },
         };
 
@@ -92,7 +100,7 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
 
             if indent > last_indent {
                 self.indents.push(indent);
-                return Some(Token::Indent);
+                return Some(Ok(Token::Indent));
             }
 
             if indent < last_indent {
@@ -103,11 +111,11 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
                 }
 
                 if indent > *self.indents.last().unwrap() {
-                    panic!("incorrect indent");
+                    return Some(Err(LexerError::Indent));
                 }
             }
 
-            return Some(Token::Newline);
+            return Some(Ok(Token::Newline));
         }
 
         // skip whitespace
@@ -143,9 +151,10 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
             }
         } else if ch.is_numeric() {
             // int
-            Token::Int(self.take_while(|c| c.is_numeric())
-                       .parse()
-                       .expect("failed to parse integer"))
+            match self.take_while(|c| c.is_numeric()).parse() {
+                Ok(val) => Token::Int(val),
+                Err(_) => return Some(Err(LexerError::IntegerOverflow)),
+            }
         } else {
             // single character tokens
             self.source.next();
@@ -163,10 +172,10 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
                 '*' => Token::Operator(Op::Mul),
                 '/' => Token::Operator(Op::Div),
                 '%' => Token::Operator(Op::Rem),
-                _ => panic!("unrecognized character"),
+                _ => return Some(Err(LexerError::UnknownCharacter)),
             }
         };
 
-        Some(tok)
+        Some(Ok(tok))
     }
 }
