@@ -1,6 +1,5 @@
 use std;
 
-use ast::{Decl, Expr, ExprKind, Func, Module};
 use lexer::{Paren, Token};
 
 macro_rules! expect {
@@ -13,6 +12,50 @@ macro_rules! expect {
     ($src:expr, $pat:pat) => (
         expect!($src, $pat, {})
     );
+}
+
+#[derive(Debug)]
+pub struct Decl {
+    pub name: String,
+}
+
+#[derive(Debug)]
+pub struct Module {
+    pub functions: Vec<Func>,
+}
+
+#[derive(Debug)]
+pub struct Func {
+    pub name: String,
+    pub params: Vec<Decl>,
+    pub body: Expr,
+}
+
+#[derive(Debug)]
+pub struct Expr {
+    pub kind: ExprKind,
+}
+
+#[derive(Debug)]
+pub enum ExprKind {
+    Block {
+        exprs: Vec<Expr>,
+    },
+    Let {
+        value: Box<Expr>,
+        var: String,
+    },
+    Function {
+        name: String,
+        args: Vec<Expr>,
+    },
+    Method {
+        expr: Box<Expr>,
+        name: String,
+        args: Vec<Expr>,
+    },
+    Int(i32),
+    Id(String),
 }
 
 #[derive(Debug)]
@@ -43,7 +86,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn func(&mut self) -> ParserResult<Func> {
         expect!(self.source, Token::Def);
-        let name = expect!(self.source, Token::Function(name), name);
+        let name = expect!(self.source, Token::Id(name), name);
 
         let mut params = Vec::new();
         while let Some(&Token::Id(_)) = self.source.peek() {
@@ -126,9 +169,9 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         loop {
             // TODO: remove ugly duplicate code
             let expr = match self.source.peek() {
-                Some(&Token::Id(_)) => self.term()?,
-                Some(&Token::Int(_)) => self.term()?,
-                Some(&Token::Open(Paren::Paren)) => self.term()?,
+                Some(&Token::Id(_)) | Some(&Token::Int(_)) | Some(&Token::Open(Paren::Paren)) => {
+                    self.term()?
+                }
                 _ => break,
             };
             args.push(expr);

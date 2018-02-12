@@ -25,7 +25,6 @@ pub enum Paren {
 #[derive(Debug)]
 pub enum LexerError {
     ParseIntError(std::num::ParseIntError),
-    ExpectCharacter(char),
     UnexpectedCharacter(char),
 }
 
@@ -101,20 +100,17 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
                 Ok(val) => Token::Int(val),
                 Err(err) => return Some(Err(LexerError::ParseIntError(err))),
             }
-        } else if ch == '\'' {
-            self.source.next();
-            Token::Function(self.take_while(|c| !c.is_whitespace()))
-        } else if ch == '-' {
-            self.source.next();
-            if let Some('>') = self.source.next() {
-                Token::Arrow
-            } else {
-                return Some(Err(LexerError::ExpectCharacter('>')))
-            }
         } else {
-            // single character tokens
             self.source.next();
             match ch {
+                '+' | '*' | '/' | '%' => Token::Function(ch.to_string()),
+                '\'' => Token::Function(self.take_while(|c| !c.is_whitespace())),
+                '-' => if let Some(&'>') = self.source.peek() {
+                    self.source.next();
+                    Token::Arrow
+                } else {
+                    Token::Function("-".to_string())
+                },
                 ',' => Token::Comma,
                 '.' => Token::Period,
                 '(' => Token::Open(Paren::Paren),

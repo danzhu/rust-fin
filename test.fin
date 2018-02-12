@@ -1,7 +1,7 @@
-def 'test a b as
-    a '+ b -> let sum,
-    sum '* sum.
+def test a b as
+    a + b -> let sum,
+    sum * sum.
 
-def 'main as
+def main as
     2 -> let i,
-    i '* ('test i 3).
+    i * ('test i 3) - 2.
