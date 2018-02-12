@@ -1,15 +1,27 @@
-use std::io;
+use std;
 
-use ast::{Module, Func, Expr, ExprKind, Op};
+use symbol::Op;
+use ast::{Module, Func, Expr, ExprKind};
 
-type Error<T> = Result<T, io::Error>;
+#[derive(Debug)]
+pub enum GeneratorError {
+    IO(std::io::Error),
+}
 
-pub struct Generator<'a, Writer: 'a + io::Write> {
+impl std::convert::From<std::io::Error> for GeneratorError {
+    fn from(err: std::io::Error) -> Self {
+        GeneratorError::IO(err)
+    }
+}
+
+type GeneratorResult<T> = Result<T, GeneratorError>;
+
+pub struct Generator<'a, Writer: 'a + std::io::Write> {
     writer: &'a mut Writer,
     reg_id: i32,
 }
 
-impl<'a, Writer: io::Write> Generator<'a, Writer> {
+impl<'a, Writer: std::io::Write> Generator<'a, Writer> {
     pub fn new(writer: &mut Writer) -> Generator<Writer> {
         Generator {
             writer,
@@ -17,22 +29,23 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
         }
     }
 
-    pub fn generate(&mut self, module: &Module) -> Error<()> {
+    pub fn generate(&mut self, module: &Module) -> GeneratorResult<()> {
         for func in module.functions.iter() {
-            self.function(&func)?;
+            self.function(func)?;
         }
         Ok(())
     }
 
-    fn function(&mut self, func: &Func) -> Error<()> {
-        self.reg_id = 1;
+    fn function(&mut self, func: &Func) -> GeneratorResult<()> {
+        self.reg_id = 0;
 
         let params = func.params.iter()
             .map(|p| format!("i32 %{}", p.name))
-            .collect::<Vec<String>>()
+            .collect::<Vec<_>>()
             .join(", ");
 
         writeln!(self.writer, "define i32 @{}({}) {{", func.name, params)?;
+        writeln!(self.writer, "entry:")?;
 
         let ret = self.expr(&func.body)?;
 
@@ -42,7 +55,7 @@ impl<'a, Writer: io::Write> Generator<'a, Writer> {
         Ok(())
     }
 
-    fn expr(&mut self, expr: &Expr) -> Error<String> {
+    fn expr(&mut self, expr: &Expr) -> GeneratorResult<String> {
         match expr.kind() {
             &ExprKind::Block { ref exprs } => {
                 // TODO: verify that at least one expr exists

@@ -1,40 +1,40 @@
-use std::iter;
+use std;
 
-use ast::{Module, Func, Expr, ExprKind, Op, Paren, Decl};
+use symbol::{Op, Paren};
+use ast::{Module, Func, Expr, ExprKind, Decl};
 use lexer::Token;
-use util::*;
 
 macro_rules! expect {
     ($src:expr, $pat:pat, $res:expr) => (
         match $src.next() {
-            Some(Ok($pat)) => $res,
-            Some(Err(err)) => return Err(err),
-            _ => return Err(concat!("expect ", stringify!($pat))),
+            Some($pat) => $res,
+            _ => return Err(ParserError::Expect(stringify!($pat))),
         }
     );
     ($src:expr, $pat:pat) => (
-        match $src.next() {
-            Some(Ok($pat)) => {},
-            Some(Err(err)) => return Err(err),
-            _ => return Err(concat!("expect ", stringify!($pat))),
-        }
+        expect!($src, $pat, {})
     );
 }
 
-type Error<T> = Result<T, &'static str>;
-
-pub struct Parser<T: Iterator<Item=Result<Token, &'static str>>> {
-    source: iter::Peekable<T>,
+#[derive(Debug)]
+pub enum ParserError {
+    Expect(&'static str),
 }
 
-impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
+type ParserResult<T> = Result<T, ParserError>;
+
+pub struct Parser<T: Iterator<Item=Token>> {
+    source: std::iter::Peekable<T>,
+}
+
+impl<T: Iterator<Item=Token>> Parser<T> {
     pub fn new(source: T) -> Parser<T> {
         Parser {
             source: source.peekable(),
         }
     }
 
-    pub fn parse(&mut self) -> Error<Module> {
+    pub fn parse(&mut self) -> ParserResult<Module> {
         let mut functions = Vec::new();
         while self.source.peek().is_some() {
             functions.push(self.func()?);
@@ -42,13 +42,13 @@ impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
         Ok(Module { functions })
     }
 
-    fn func(&mut self) -> Error<Func> {
+    fn func(&mut self) -> ParserResult<Func> {
         expect!(self.source, Token::Def);
         let name = expect!(self.source, Token::Id(name), name);
 
         expect!(self.source, Token::Open(Paren::Paren));
         let mut params = Vec::new();
-        if let Some(&Token::Close(Paren::Paren)) = self.source.try_peek()? {
+        if let Some(&Token::Close(Paren::Paren)) = self.source.peek() {
             // no params
             self.source.next();
         } else {
@@ -56,10 +56,10 @@ impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
                 let name = expect!(self.source, Token::Id(name), name);
                 params.push(Decl { name });
 
-                match self.source.try_next()? {
+                match self.source.next() {
                     Some(Token::Close(Paren::Paren)) => break,
                     Some(Token::Comma) => {},
-                    _ => return Err("expect closing parenthesis or comma"),
+                    _ => return Err(ParserError::Expect("closing parenthesis or comma")),
                 }
             }
         }
@@ -71,12 +71,12 @@ impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
         Ok(Func { name, params, body })
     }
 
-    fn block(&mut self) -> Error<Expr> {
+    fn block(&mut self) -> ParserResult<Expr> {
         expect!(self.source, Token::Indent);
 
         let mut exprs = Vec::new();
         loop {
-            match self.source.try_peek()? {
+            match self.source.peek() {
                 Some(&Token::Dedent) => break,
                 None => panic!("no matching dedent"),
                 _ => exprs.push(self.statement()?),
@@ -88,8 +88,8 @@ impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
         Ok(Expr::new(ExprKind::Block { exprs }))
     }
 
-    fn statement(&mut self) -> Error<Expr> {
-        let expr = match self.source.try_peek()? {
+    fn statement(&mut self) -> ParserResult<Expr> {
+        let expr = match self.source.peek() {
             Some(&Token::Let) => {
                 self.source.next();
                 let var = expect!(self.source, Token::Id(name), name);
@@ -103,9 +103,9 @@ impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
         Ok(expr)
     }
 
-    fn expr(&mut self) -> Error<Expr> {
+    fn expr(&mut self) -> ParserResult<Expr> {
         let mut res = self.term()?;
-        while let Some(&Token::Operator(op)) = self.source.try_peek()? {
+        while let Some(&Token::Operator(op)) = self.source.peek() {
             match op {
                 Op::Add | Op::Sub => {
                     self.source.next();
@@ -122,9 +122,9 @@ impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
         Ok(res)
     }
 
-    fn term(&mut self) -> Error<Expr> {
+    fn term(&mut self) -> ParserResult<Expr> {
         let mut res = self.factor()?;
-        while let Some(&Token::Operator(op)) = self.source.try_peek()? {
+        while let Some(&Token::Operator(op)) = self.source.peek() {
             match op {
                 Op::Mul | Op::Div | Op::Rem => {
                     self.source.next();
@@ -141,24 +141,24 @@ impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
         Ok(res)
     }
 
-    fn factor(&mut self) -> Error<Expr> {
-        match self.source.try_next()? {
+    fn factor(&mut self) -> ParserResult<Expr> {
+        match self.source.next() {
             Some(Token::Id(name)) => {
-                if let Some(&Token::Open(Paren::Paren)) = self.source.try_peek()? {
+                if let Some(&Token::Open(Paren::Paren)) = self.source.peek() {
                     // function call
                     self.source.next();
 
                     let mut args = Vec::new();
-                    if let Some(&Token::Close(Paren::Paren)) = self.source.try_peek()? {
+                    if let Some(&Token::Close(Paren::Paren)) = self.source.peek() {
                         // no params
                         self.source.next();
                     } else {
                         loop {
                             args.push(self.expr()?);
-                            match self.source.try_next()? {
+                            match self.source.next() {
                                 Some(Token::Close(Paren::Paren)) => break,
                                 Some(Token::Comma) => {},
-                                _ => return Err("expect closing parenthesis or comma"),
+                                _ => return Err(ParserError::Expect("closing parenthesis or comma")),
                             }
                         }
                     }
@@ -178,7 +178,7 @@ impl<T: Iterator<Item=Result<Token, &'static str>>> Parser<T> {
                 expect!(self.source, Token::Close(Paren::Paren));
                 Ok(res)
             }
-            _ => Err("expect integer literal or open parenthesis")
+            _ => Err(ParserError::Expect("integer literal or open parenthesis"))
         }
     }
 }

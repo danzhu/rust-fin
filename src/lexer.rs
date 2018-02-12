@@ -1,7 +1,8 @@
-use std::str;
-use std::iter;
+use std;
 
-use ast::{Op, Paren};
+use symbol::{Op, Paren};
+
+const INDENT_STACK_EMPTY: &str = "indent stack empty";
 
 #[derive(Debug)]
 pub enum Token {
@@ -20,19 +21,20 @@ pub enum Token {
     Operator(Op),
 }
 
+#[derive(Debug)]
 pub enum LexerError {
     Indent,
-    IntegerOverflow,
+    ParseIntError(std::num::ParseIntError),
     UnknownCharacter,
 }
 
-type LexerResult<T> = Result<T, LexerError>;
-
 pub struct Lexer<Iter: Iterator<Item=char>> {
-    source: iter::Peekable<Iter>,
+    source: std::iter::Peekable<Iter>,
     indents: Vec<usize>,
     dedents: usize,
 }
+
+type LexerResult<T> = Result<T, LexerError>;
 
 impl<Iter: Iterator<Item=char>> Lexer<Iter> {
     pub fn new(source: Iter) -> Lexer<Iter> {
@@ -82,8 +84,8 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
 
             let mut indent = 0;
             while let Some(&' ') = self.source.peek() {
-                indent += 1;
                 self.source.next();
+                indent += 1;
             }
 
             // ignore indent on empty line
@@ -96,7 +98,7 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
                 return self.next();
             }
 
-            let last_indent = *self.indents.last().unwrap();
+            let last_indent = *self.indents.last().expect(INDENT_STACK_EMPTY);
 
             if indent > last_indent {
                 self.indents.push(indent);
@@ -105,12 +107,12 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
 
             if indent < last_indent {
                 assert_eq!(self.dedents, 0);
-                while indent < *self.indents.last().unwrap() {
+                while indent < *self.indents.last().expect(INDENT_STACK_EMPTY) {
                     self.indents.pop();
                     self.dedents += 1;
                 }
 
-                if indent > *self.indents.last().unwrap() {
+                if indent > *self.indents.last().expect(INDENT_STACK_EMPTY) {
                     return Some(Err(LexerError::Indent));
                 }
             }
@@ -153,7 +155,7 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
             // int
             match self.take_while(|c| c.is_numeric()).parse() {
                 Ok(val) => Token::Int(val),
-                Err(_) => return Some(Err(LexerError::IntegerOverflow)),
+                Err(err) => return Some(Err(LexerError::ParseIntError(err))),
             }
         } else {
             // single character tokens
