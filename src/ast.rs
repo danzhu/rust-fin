@@ -1,50 +1,43 @@
-use symbol::Op;
-
+#[derive(Debug)]
 pub struct Decl {
     pub name: String,
 }
 
+#[derive(Debug)]
 pub struct Module {
     pub functions: Vec<Func>,
 }
 
+#[derive(Debug)]
 pub struct Func {
     pub name: String,
     pub params: Vec<Decl>,
     pub body: Expr,
 }
 
+#[derive(Debug)]
 pub struct Expr {
-    kind: ExprKind,
+    pub kind: ExprKind,
 }
 
+#[derive(Debug)]
 pub enum ExprKind {
     Block {
         exprs: Vec<Expr>,
     },
     Let {
-        var: String,
         value: Box<Expr>,
+        var: String,
     },
-    Binary {
-        op: Op,
-        left: Box<Expr>,
-        right: Box<Expr>,
+    Function {
+        name: String,
+        args: Vec<Expr>,
     },
-    Call {
+    Method {
+        expr: Box<Expr>,
         name: String,
         args: Vec<Expr>,
     },
     Int(i32),
     Id(String),
-}
-
-impl Expr {
-    pub fn new(kind: ExprKind) -> Expr {
-        Expr { kind }
-    }
-
-    pub fn kind(&self) -> &ExprKind {
-        &self.kind
-    }
 }

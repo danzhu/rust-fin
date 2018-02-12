@@ -1,14 +1,13 @@
 use std;
 
-use symbol::{Op, Paren};
-use ast::{Module, Func, Expr, ExprKind, Decl};
-use lexer::Token;
+use ast::{Decl, Expr, ExprKind, Func, Module};
+use lexer::{Paren, Token};
 
 macro_rules! expect {
     ($src:expr, $pat:pat, $res:expr) => (
         match $src.next() {
             Some($pat) => $res,
-            _ => return Err(ParserError::Expect(stringify!($pat))),
+            token => return Err(ParserError::Expect(stringify!($pat), token)),
         }
     );
     ($src:expr, $pat:pat) => (
@@ -18,16 +17,16 @@ macro_rules! expect {
 
 #[derive(Debug)]
 pub enum ParserError {
-    Expect(&'static str),
+    Expect(&'static str, Option<Token>),
 }
 
 type ParserResult<T> = Result<T, ParserError>;
 
-pub struct Parser<T: Iterator<Item=Token>> {
+pub struct Parser<T: Iterator<Item = Token>> {
     source: std::iter::Peekable<T>,
 }
 
-impl<T: Iterator<Item=Token>> Parser<T> {
+impl<T: Iterator<Item = Token>> Parser<T> {
     pub fn new(source: T) -> Parser<T> {
         Parser {
             source: source.peekable(),
@@ -44,141 +43,116 @@ impl<T: Iterator<Item=Token>> Parser<T> {
 
     fn func(&mut self) -> ParserResult<Func> {
         expect!(self.source, Token::Def);
-        let name = expect!(self.source, Token::Id(name), name);
+        let name = expect!(self.source, Token::Function(name), name);
 
-        expect!(self.source, Token::Open(Paren::Paren));
         let mut params = Vec::new();
-        if let Some(&Token::Close(Paren::Paren)) = self.source.peek() {
-            // no params
-            self.source.next();
-        } else {
-            loop {
-                let name = expect!(self.source, Token::Id(name), name);
-                params.push(Decl { name });
-
-                match self.source.next() {
-                    Some(Token::Close(Paren::Paren)) => break,
-                    Some(Token::Comma) => {},
-                    _ => return Err(ParserError::Expect("closing parenthesis or comma")),
-                }
-            }
+        while let Some(&Token::Id(_)) = self.source.peek() {
+            let name = expect!(self.source, Token::Id(name), name);
+            params.push(Decl { name });
         }
 
         expect!(self.source, Token::As);
 
         let body = self.block()?;
 
+        expect!(self.source, Token::Period);
+
         Ok(Func { name, params, body })
     }
 
     fn block(&mut self) -> ParserResult<Expr> {
-        expect!(self.source, Token::Indent);
-
         let mut exprs = Vec::new();
         loop {
+            exprs.push(self.statement()?);
             match self.source.peek() {
-                Some(&Token::Dedent) => break,
-                None => panic!("no matching dedent"),
-                _ => exprs.push(self.statement()?),
+                Some(&Token::Comma) => {
+                    self.source.next();
+                }
+                _ => break,
             }
         }
 
-        expect!(self.source, Token::Dedent);
+        let kind = ExprKind::Block { exprs };
 
-        Ok(Expr::new(ExprKind::Block { exprs }))
+        Ok(Expr { kind })
     }
 
     fn statement(&mut self) -> ParserResult<Expr> {
-        let expr = match self.source.peek() {
-            Some(&Token::Let) => {
-                self.source.next();
-                let var = expect!(self.source, Token::Id(name), name);
-                expect!(self.source, Token::Equal);
-                let value = self.expr()?;
-                Expr::new(ExprKind::Let { var, value: Box::new(value) })
-            },
-            _ => self.expr()?,
-        };
-        expect!(self.source, Token::Newline);
-        Ok(expr)
+        let expr = self.expr()?;
+        if let Some(&Token::Arrow) = self.source.peek() {
+            self.source.next();
+            // TODO: pattern
+            expect!(self.source, Token::Let);
+            let var = expect!(self.source, Token::Id(name), name);
+            Ok(Expr {
+                kind: ExprKind::Let {
+                    value: Box::new(expr),
+                    var,
+                },
+            })
+        } else {
+            Ok(expr)
+        }
     }
 
     fn expr(&mut self) -> ParserResult<Expr> {
-        let mut res = self.term()?;
-        while let Some(&Token::Operator(op)) = self.source.peek() {
-            match op {
-                Op::Add | Op::Sub => {
-                    self.source.next();
-                    let right = self.term()?;
-                    res = Expr::new(ExprKind::Binary {
-                        op,
-                        left: Box::new(res),
-                        right: Box::new(right),
-                    })
-                },
-                _ => break,
+        let mut expr = match self.source.peek() {
+            Some(&Token::Function(_)) => {
+                let name = expect!(self.source, Token::Function(name), name);
+                let args = self.args()?;
+                Expr {
+                    kind: ExprKind::Function { name, args },
+                }
             }
+            _ => self.term()?,
+        };
+
+        while let Some(&Token::Function(_)) = self.source.peek() {
+            let name = expect!(self.source, Token::Function(name), name);
+            let args = self.args()?;
+            let kind = ExprKind::Method {
+                expr: Box::new(expr),
+                name,
+                args,
+            };
+            expr = Expr { kind };
         }
-        Ok(res)
+
+        Ok(expr)
+    }
+
+    fn args(&mut self) -> ParserResult<Vec<Expr>> {
+        let mut args = Vec::new();
+        loop {
+            // TODO: remove ugly duplicate code
+            let expr = match self.source.peek() {
+                Some(&Token::Id(_)) => self.term()?,
+                Some(&Token::Int(_)) => self.term()?,
+                Some(&Token::Open(Paren::Paren)) => self.term()?,
+                _ => break,
+            };
+            args.push(expr);
+        }
+        Ok(args)
     }
 
     fn term(&mut self) -> ParserResult<Expr> {
-        let mut res = self.factor()?;
-        while let Some(&Token::Operator(op)) = self.source.peek() {
-            match op {
-                Op::Mul | Op::Div | Op::Rem => {
-                    self.source.next();
-                    let right = self.factor()?;
-                    res = Expr::new(ExprKind::Binary {
-                        op,
-                        left: Box::new(res),
-                        right: Box::new(right),
-                    })
-                },
-                _ => break,
-            }
-        }
-        Ok(res)
-    }
-
-    fn factor(&mut self) -> ParserResult<Expr> {
-        match self.source.next() {
-            Some(Token::Id(name)) => {
-                if let Some(&Token::Open(Paren::Paren)) = self.source.peek() {
-                    // function call
-                    self.source.next();
-
-                    let mut args = Vec::new();
-                    if let Some(&Token::Close(Paren::Paren)) = self.source.peek() {
-                        // no params
-                        self.source.next();
-                    } else {
-                        loop {
-                            args.push(self.expr()?);
-                            match self.source.next() {
-                                Some(Token::Close(Paren::Paren)) => break,
-                                Some(Token::Comma) => {},
-                                _ => return Err(ParserError::Expect("closing parenthesis or comma")),
-                            }
-                        }
-                    }
-
-                    Ok(Expr::new(ExprKind::Call {
-                        name,
-                        args,
-                    }))
-                } else {
-                    // id
-                    Ok(Expr::new(ExprKind::Id(name)))
-                }
-            },
-            Some(Token::Int(val)) => Ok(Expr::new(ExprKind::Int(val))),
+        let kind = match self.source.next() {
+            Some(Token::Id(name)) => ExprKind::Id(name),
+            Some(Token::Int(val)) => ExprKind::Int(val),
             Some(Token::Open(Paren::Paren)) => {
-                let res = self.expr()?;
+                let block = self.block()?;
                 expect!(self.source, Token::Close(Paren::Paren));
-                Ok(res)
+                return Ok(block);
             }
-            _ => Err(ParserError::Expect("integer literal or open parenthesis"))
-        }
+            token => {
+                return Err(ParserError::Expect(
+                    "binding, literal, or open parenthesis",
+                    token,
+                ))
+            }
+        };
+
+        Ok(Expr { kind })
     }
 }

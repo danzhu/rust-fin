@@ -1,20 +1,22 @@
 mod ast;
-mod generator;
+
 mod lexer;
-mod symbol;
 mod parser;
+// mod generator;
 
 use std::io::Read;
 
-use generator::Generator;
 use lexer::Lexer;
 use parser::Parser;
+// use generator::Generator;
 
 fn main() {
     // lex
     let tokens = {
         let mut source = String::new();
-        std::io::stdin().read_to_string(&mut source).expect("cannot read from stdin");
+        std::io::stdin()
+            .read_to_string(&mut source)
+            .expect("cannot read from stdin");
         let lex = Lexer::new(source.chars());
         lex.collect::<Result<Vec<_>, _>>().expect("lexer error")
     };
@@ -25,8 +27,10 @@ fn main() {
         par.parse().expect("parser error")
     };
 
-    // generate
-    let out = &mut std::io::stdout();
-    let mut gen = Generator::new(out);
-    gen.generate(&module).expect("code generator error");
+    println!("{:?}", module);
+
+    // // generate
+    // let out = &mut std::io::stdout();
+    // let mut gen = Generator::new(out);
+    // gen.generate(&module).expect("code generator error");
 }

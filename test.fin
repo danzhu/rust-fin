@@ -1,14 +1,7 @@
-def test(a, b) as
-    let sum = a + b
-    sum * sum
+def 'test a b as
+    a '+ b -> let sum,
+    sum '* sum.
 
-def main() as
-    let i = 2
-    i * test(i, 3)
-
-# list.filter item by
-#     item.value > 0
-# .sort item by
-#     item.key
-# .map item to
-#     item.value
+def 'main as
+    2 -> let i,
+    i '* ('test i 3).
