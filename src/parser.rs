@@ -186,7 +186,7 @@ impl std::fmt::Debug for Expr {
     }
 }
 
-impl std::fmt::Debug for ParserError {
+impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             &ParserError::Expect(val, ref token) => {

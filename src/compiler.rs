@@ -29,24 +29,26 @@ impl From<std::io::Error> for CompilerError {
     }
 }
 
-impl std::fmt::Debug for CompilerError {
+impl std::fmt::Display for CompilerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            &CompilerError::Lexer(ref err) => write!(f, "lexer error: {:?}", err),
-            &CompilerError::Parser(ref err) => write!(f, "parser error: {:?}", err),
+            &CompilerError::Lexer(ref err) => write!(f, "lexer error: {}", err),
+            &CompilerError::Parser(ref err) => write!(f, "parser error: {}", err),
             &CompilerError::IO(ref err) => write!(f, "io error: {}", err),
         }
     }
 }
 
-pub fn compile<In, Out>(input: In, mut output: Out) -> CompilerResult<()>
+pub fn compile<In, Out>(mut input: In, mut output: Out) -> CompilerResult<()>
 where
-    In: Iterator<Item = char>,
+    In: std::io::Read,
     Out: std::io::Write,
 {
     // lex
     let tokens = {
-        let lex = Lexer::new(input);
+        let mut src = String::new();
+        input.read_to_string(&mut src)?;
+        let lex = Lexer::new(src.chars());
         lex.collect::<Result<Vec<_>, _>>()?
     };
 

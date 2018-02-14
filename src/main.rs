@@ -3,18 +3,15 @@ mod lexer;
 mod parser;
 // mod generator;
 
-use std::io::Read;
+fn run() -> i32 {
+    if let Err(err) = compiler::compile(std::io::stdin(), std::io::stdout()) {
+        println!("{}", err);
+        1
+    } else {
+        0
+    }
+}
 
 fn main() {
-    let mut source = String::new();
-    std::io::stdin()
-        .read_to_string(&mut source)
-        .expect("cannot read from stdin");
-
-    let out = &mut std::io::stdout();
-
-    match compiler::compile(source.chars(), out) {
-        Err(err) => println!("{:?}", err),
-        _ => {}
-    }
+    std::process::exit(run());
 }

@@ -30,7 +30,7 @@ pub struct Lexer<Iter: Iterator<Item=char>> {
 
 type LexerResult<T> = Result<T, LexerError>;
 
-impl std::fmt::Debug for LexerError {
+impl std::fmt::Display for LexerError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             &LexerError::ParseIntError(ref err) => {
