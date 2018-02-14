@@ -1,31 +1,27 @@
 use std;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Token {
     Def,
     As,
+    If,
+    Then,
+    Elif,
+    Else,
     Let,
     Comma,
     Period,
     Arrow,
+    LParen,
+    RParen,
     Function(String),
     Id(String),
     Int(i32),
-    Open(Paren),
-    Close(Paren),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Paren {
-    Paren,
-    Bracket,
-    Brace,
-}
-
-#[derive(Debug)]
 pub enum LexerError {
     ParseIntError(std::num::ParseIntError),
-    UnexpectedCharacter(char),
+    Unexpected(char),
 }
 
 pub struct Lexer<Iter: Iterator<Item=char>> {
@@ -33,6 +29,20 @@ pub struct Lexer<Iter: Iterator<Item=char>> {
 }
 
 type LexerResult<T> = Result<T, LexerError>;
+
+impl std::fmt::Debug for LexerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            &LexerError::ParseIntError(ref err) => {
+                write!(f, "{}", err)?;
+            }
+            &LexerError::Unexpected(ch) => {
+                write!(f, "unexpected character '{}'", ch)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 impl<Iter: Iterator<Item=char>> Lexer<Iter> {
     pub fn new(source: Iter) -> Lexer<Iter> {
@@ -89,6 +99,14 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
                 Token::Def
             } else if id == "as" {
                 Token::As
+            } else if id == "if" {
+                Token::If
+            } else if id == "then" {
+                Token::Then
+            } else if id == "elif" {
+                Token::Elif
+            } else if id == "else" {
+                Token::Else
             } else if id == "let" {
                 Token::Let
             } else {
@@ -103,23 +121,19 @@ impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
         } else {
             self.source.next();
             match ch {
-                '+' | '*' | '/' | '%' => Token::Function(ch.to_string()),
-                '\'' => Token::Function(self.take_while(|c| !c.is_whitespace())),
+                '\'' => Token::Function(self.take_while(|c| c.is_alphanumeric())),
+                '+' | '*' | '/' | '%' | '=' => Token::Function(ch.to_string()),
                 '-' => if let Some(&'>') = self.source.peek() {
                     self.source.next();
                     Token::Arrow
                 } else {
-                    Token::Function("-".to_string())
+                    Token::Function(ch.to_string())
                 },
                 ',' => Token::Comma,
                 '.' => Token::Period,
-                '(' => Token::Open(Paren::Paren),
-                ')' => Token::Close(Paren::Paren),
-                '[' => Token::Open(Paren::Bracket),
-                ']' => Token::Close(Paren::Bracket),
-                '{' => Token::Open(Paren::Brace),
-                '}' => Token::Close(Paren::Brace),
-                _ => return Some(Err(LexerError::UnexpectedCharacter(ch))),
+                '(' => Token::LParen,
+                ')' => Token::RParen,
+                _ => return Some(Err(LexerError::Unexpected(ch))),
             }
         };
 

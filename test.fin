@@ -1,7 +1,11 @@
-def test a b as
-    a + b -> let sum,
-    sum * sum.
+def fib n Int -> Int as
+    if n = 0 then
+        0
+    elif n = 1 then
+        1
+    else
+        ('fib (n - 1)) + ('fib (n - 2))..
 
 def main as
-    2 -> let i,
-    i * ('test i 3) - 2.
+    20 -> let i,
+    'fib i.
