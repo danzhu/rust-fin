@@ -152,7 +152,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 let name = expect_token!(self, TokenKind::Id(name), name);
                 let args = self.args()?;
                 Ok(Expr::new(ExprKind::Function {
-                    path: Path::new(name),
+                    func: Func::new(Path::new(name)),
                     args,
                 }))
             }

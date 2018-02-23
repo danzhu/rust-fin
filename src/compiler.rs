@@ -5,6 +5,7 @@ use std::result;
 use store;
 use lexer;
 use parser;
+use resolver;
 
 pub struct Compiler {
     store: store::Store,
@@ -13,6 +14,7 @@ pub struct Compiler {
 pub enum Error {
     Lexer(lexer::Error),
     Parser(parser::Error),
+    Resolver(resolver::Error),
     IO(io::Error),
 }
 
@@ -30,6 +32,12 @@ impl From<parser::Error> for Error {
     }
 }
 
+impl From<resolver::Error> for Error {
+    fn from(err: resolver::Error) -> Error {
+        Error::Resolver(err)
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IO(err)
@@ -41,6 +49,7 @@ impl fmt::Display for Error {
         match *self {
             Error::Lexer(ref err) => write!(f, "lexer error: {}", err),
             Error::Parser(ref err) => write!(f, "parser error: {}", err),
+            Error::Resolver(ref err) => write!(f, "resolver error: {}", err),
             Error::IO(ref err) => write!(f, "io error: {}", err),
         }
     }
@@ -61,6 +70,7 @@ impl Compiler {
         let tokens = lexer::lex(input)?;
         let source = parser::parse(tokens.into_iter())?;
         self.store.define(source);
+        resolver::resolve(&mut self.store)?;
 
         write!(output, "{:?}", self.store)?;
 

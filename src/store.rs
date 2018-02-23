@@ -27,6 +27,14 @@ impl Store {
         store
     }
 
+    pub fn type_index(&self, path: &Path) -> Option<Index> {
+        self.type_map.get(&path.name).cloned()
+    }
+
+    pub fn func_index(&self, path: &Path) -> Option<Index> {
+        self.func_map.get(&path.name).cloned()
+    }
+
     pub fn define(&mut self, src: Source) {
         for def in src.defs {
             match def.kind {
@@ -37,9 +45,9 @@ impl Store {
     }
 
     fn define_type(&mut self, tp: TypeDef) {
-                    let index = Index::new(self.type_defs.len());
-                    self.type_map.insert(tp.name.clone(), index);
-                    self.type_defs.push(tp);
+        let index = Index::new(self.type_defs.len());
+        self.type_map.insert(tp.name.clone(), index);
+        self.type_defs.push(tp);
     }
 
     fn define_func(&mut self, func: FuncDef) {

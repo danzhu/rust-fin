@@ -5,6 +5,7 @@ mod store;
 mod compiler;
 mod lexer;
 mod parser;
+mod resolver;
 
 use std::io;
 use std::process;
