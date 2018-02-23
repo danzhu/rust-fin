@@ -1,69 +1,74 @@
-use std;
+use std::io;
+use std::fmt;
+use std::result;
 
-use lexer::{Lexer, LexerError};
-use parser::{Parser, ParserError};
+use lexer::{self, Lexer};
+use parser::{self, Parser};
 
-pub enum CompilerError {
-    Lexer(LexerError),
-    Parser(ParserError),
-    IO(std::io::Error),
+pub struct Compiler {}
+
+pub enum Error {
+    Lexer(lexer::Error),
+    Parser(parser::Error),
+    IO(io::Error),
 }
 
-type CompilerResult<T> = Result<T, CompilerError>;
+type Result = result::Result<(), Error>;
 
-impl From<LexerError> for CompilerError {
-    fn from(err: LexerError) -> CompilerError {
-        CompilerError::Lexer(err)
+impl From<lexer::Error> for Error {
+    fn from(err: lexer::Error) -> Error {
+        Error::Lexer(err)
     }
 }
 
-impl From<ParserError> for CompilerError {
-    fn from(err: ParserError) -> CompilerError {
-        CompilerError::Parser(err)
+impl From<parser::Error> for Error {
+    fn from(err: parser::Error) -> Error {
+        Error::Parser(err)
     }
 }
 
-impl From<std::io::Error> for CompilerError {
-    fn from(err: std::io::Error) -> CompilerError {
-        CompilerError::IO(err)
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IO(err)
     }
 }
 
-impl std::fmt::Display for CompilerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            &CompilerError::Lexer(ref err) => write!(f, "lexer error: {}", err),
-            &CompilerError::Parser(ref err) => write!(f, "parser error: {}", err),
-            &CompilerError::IO(ref err) => write!(f, "io error: {}", err),
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Lexer(ref err) => write!(f, "lexer error: {}", err),
+            Error::Parser(ref err) => write!(f, "parser error: {}", err),
+            Error::IO(ref err) => write!(f, "io error: {}", err),
         }
     }
 }
 
-pub fn compile<In, Out>(mut input: In, mut output: Out) -> CompilerResult<()>
-where
-    In: std::io::Read,
-    Out: std::io::Write,
-{
-    // lex
-    let tokens = {
-        let mut src = String::new();
-        input.read_to_string(&mut src)?;
-        let lex = Lexer::new(src.chars());
-        lex.collect::<Result<Vec<_>, _>>()?
-    };
+impl Compiler {
+    pub fn new() -> Self {
+        Self {}
+    }
 
-    // parse
-    let module = {
-        let mut par = Parser::new(tokens.into_iter());
-        par.parse()?
-    };
+    pub fn compile<In, Out>(&self, mut input: In, mut output: Out) -> Result
+    where
+        In: io::Read,
+        Out: io::Write,
+    {
+        // lex
+        let tokens = {
+            let mut src = String::new();
+            input.read_to_string(&mut src)?;
+            let lex = Lexer::new(src.chars());
+            lex.collect::<result::Result<Vec<_>, _>>()?
+        };
 
-    writeln!(output, "{:?}", module)?;
+        // parse
+        let module = {
+            let mut par = Parser::new(tokens.into_iter());
+            par.parse()?
+        };
 
-    // // generate
-    // let out = &mut std::io::stdout();
-    // let mut gen = Generator::new(out);
-    // gen.generate(&module).expect("code generator error");
+        write!(output, "{:?}", module)?;
 
-    Ok(())
+        Ok(())
+    }
 }

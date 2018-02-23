@@ -1,7 +1,28 @@
-use std;
+use std::fmt;
+use std::iter;
+use std::num;
+use std::result;
+
+#[derive(Copy, Clone, Debug)]
+pub struct Pos {
+    pub line: i32,
+    pub column: i32,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Span {
+    pub start: Pos,
+    pub end: Pos,
+}
 
 #[derive(Clone, Debug)]
-pub enum Token {
+pub struct Token {
+    pub span: Span,
+    pub kind: TokenKind,
+}
+
+#[derive(Clone, Debug)]
+pub enum TokenKind {
     Def,
     As,
     If,
@@ -14,129 +35,147 @@ pub enum Token {
     Arrow,
     LParen,
     RParen,
-    Function(String),
+    Quote,
+    Operator(String),
     Id(String),
     Int(i32),
 }
 
-pub enum LexerError {
-    ParseIntError(std::num::ParseIntError),
-    Unexpected(char),
+pub enum Error {
+    ParseInt(num::ParseIntError),
+    UnexpectedChar(char),
 }
 
-pub struct Lexer<Iter: Iterator<Item=char>> {
-    source: std::iter::Peekable<Iter>,
+pub struct Lexer<Iter: Iterator<Item = char>> {
+    source: iter::Peekable<Iter>,
+    pos: Pos,
 }
 
-type LexerResult<T> = Result<T, LexerError>;
+type Result<T> = result::Result<T, Error>;
 
-impl std::fmt::Display for LexerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            &LexerError::ParseIntError(ref err) => {
-                write!(f, "{}", err)?;
-            }
-            &LexerError::Unexpected(ch) => {
-                write!(f, "unexpected character '{}'", ch)?;
-            }
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::ParseInt(ref err) => write!(f, "{}", err),
+            Error::UnexpectedChar(ch) => write!(f, "unexpected character '{}'", ch),
         }
-        Ok(())
     }
 }
 
-impl<Iter: Iterator<Item=char>> Lexer<Iter> {
-    pub fn new(source: Iter) -> Lexer<Iter> {
-        Lexer {
+impl<Iter> Lexer<Iter>
+where
+    Iter: Iterator<Item = char>,
+{
+    pub fn new(source: Iter) -> Self {
+        Self {
             source: source.peekable(),
+            pos: Pos { line: 1, column: 1 },
         }
     }
 
-    fn take_while<P>(&mut self, pred: P) -> String
-        where P: Fn(char) -> bool {
+    fn read(&mut self) -> Option<char> {
+        let ch = self.source.next();
+        match ch {
+            Some('\n') => {
+                self.pos.line += 1;
+                self.pos.column = 1;
+            }
+            Some(_) => {
+                self.pos.column += 1;
+            }
+            None => {}
+        }
+        ch
+    }
+
+    fn read_while<Pred>(&mut self, pred: Pred) -> String
+    where
+        Pred: Fn(char) -> bool,
+    {
         let mut s = String::new();
         loop {
             match self.source.peek() {
                 Some(&c) if pred(c) => s.push(c),
                 _ => break s,
             }
-            self.source.next();
+            self.read();
         }
     }
 }
 
-impl<Iter: Iterator<Item=char>> Iterator for Lexer<Iter> {
-    type Item = LexerResult<Token>;
+impl<Iter> Iterator for Lexer<Iter>
+where
+    Iter: Iterator<Item = char>,
+{
+    type Item = Result<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ch = match self.source.peek() {
-            Some(&ch) => ch,
-            None => return None,
-        };
+        let ch = *self.source.peek()?;
 
         // skip whitespace
         if ch.is_whitespace() {
-            self.source.next();
+            self.read();
             return self.next();
         }
 
         // skip comments
         if ch == '#' {
-            self.source.next();
+            self.read();
             loop {
-                match self.source.peek() {
-                    Some(&'\n') | None => break,
-                    _ => self.source.next(),
-                };
+                match self.read() {
+                    Some('\n') | None => break,
+                    _ => {}
+                }
             }
             return self.next();
         }
 
-        let tok = if ch.is_alphabetic() {
-            // id
-            let id = self.take_while(|c| c.is_alphanumeric());
+        let start = self.pos;
 
-            if id == "def" {
-                Token::Def
-            } else if id == "as" {
-                Token::As
-            } else if id == "if" {
-                Token::If
-            } else if id == "then" {
-                Token::Then
-            } else if id == "elif" {
-                Token::Elif
-            } else if id == "else" {
-                Token::Else
-            } else if id == "let" {
-                Token::Let
-            } else {
-                Token::Id(id)
+        let kind = if ch.is_alphabetic() {
+            // id
+            let id = self.read_while(|c| c.is_alphanumeric());
+
+            match id.as_ref() {
+                "def" => TokenKind::Def,
+                "as" => TokenKind::As,
+                "if" => TokenKind::If,
+                "then" => TokenKind::Then,
+                "elif" => TokenKind::Elif,
+                "else" => TokenKind::Else,
+                "let" => TokenKind::Let,
+                _ => TokenKind::Id(id),
             }
         } else if ch.is_numeric() {
             // int
-            match self.take_while(|c| c.is_numeric()).parse() {
-                Ok(val) => Token::Int(val),
-                Err(err) => return Some(Err(LexerError::ParseIntError(err))),
+            match self.read_while(|c| c.is_numeric()).parse() {
+                Ok(val) => TokenKind::Int(val),
+                Err(err) => return Some(Err(Error::ParseInt(err))),
             }
         } else {
-            self.source.next();
+            self.read();
             match ch {
-                '\'' => Token::Function(self.take_while(|c| c.is_alphanumeric())),
-                '+' | '*' | '/' | '%' | '=' => Token::Function(ch.to_string()),
+                '\'' => TokenKind::Quote,
+                '+' | '*' | '/' | '%' | '=' => TokenKind::Operator(ch.to_string()),
                 '-' => if let Some(&'>') = self.source.peek() {
-                    self.source.next();
-                    Token::Arrow
+                    self.read();
+                    TokenKind::Arrow
                 } else {
-                    Token::Function(ch.to_string())
+                    TokenKind::Operator(ch.to_string())
                 },
-                ',' => Token::Comma,
-                '.' => Token::Period,
-                '(' => Token::LParen,
-                ')' => Token::RParen,
-                _ => return Some(Err(LexerError::Unexpected(ch))),
+                ',' => TokenKind::Comma,
+                '.' => TokenKind::Period,
+                '(' => TokenKind::LParen,
+                ')' => TokenKind::RParen,
+                _ => return Some(Err(Error::UnexpectedChar(ch))),
             }
         };
 
-        Some(Ok(tok))
+        let end = self.pos;
+
+        Some(Ok(Token {
+            span: Span { start, end },
+            kind,
+        }))
     }
 }

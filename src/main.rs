@@ -1,17 +1,25 @@
+mod ast;
 mod compiler;
 mod lexer;
 mod parser;
-// mod generator;
+
+use std::io;
+use std::process;
+
+use compiler::Compiler;
 
 fn run() -> i32 {
-    if let Err(err) = compiler::compile(std::io::stdin(), std::io::stdout()) {
+    let comp = Compiler::new();
+    let res = comp.compile(io::stdin(), io::stdout());
+
+    if let Err(err) = res {
         println!("{}", err);
-        1
-    } else {
-        0
+        return 1;
     }
+
+    0
 }
 
 fn main() {
-    std::process::exit(run());
+    process::exit(run());
 }
