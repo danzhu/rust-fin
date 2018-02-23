@@ -1,4 +1,5 @@
 use std::fmt;
+use std::usize;
 
 const INDENT: &str = "  ";
 
@@ -11,10 +12,20 @@ pub struct Def {
 }
 
 pub enum DefKind {
-    Function(Function),
+    Type(TypeDef),
+    Func(FuncDef),
 }
 
-pub struct Function {
+pub struct TypeDef {
+    pub name: String,
+    pub kind: TypeDefKind,
+}
+
+pub enum TypeDefKind {
+    Int,
+}
+
+pub struct FuncDef {
     pub name: String,
     pub params: Vec<Binding>,
     pub ret: Type,
@@ -49,22 +60,37 @@ pub enum ExprKind {
         fail: Box<Expr>,
     },
     Int(i32),
-    Id(String),
+    Id(Path),
     Noop,
 }
 
-pub enum Type {
+pub struct Type {
+    kind: TypeKind,
+}
+
+pub enum TypeKind {
     Named { path: Path },
     Void,
 }
 
 pub struct Path {
     pub name: String,
+    pub id: Index,
 }
 
 pub struct Binding {
     pub name: String,
     pub tp: Type,
+}
+
+pub struct Index(usize);
+
+impl Source {
+    pub fn new() -> Self {
+        Self {
+            defs: Vec::new(),
+        }
+    }
 }
 
 impl fmt::Debug for Source {
@@ -76,15 +102,31 @@ impl fmt::Debug for Source {
     }
 }
 
+impl Def {
+    pub fn new(kind: DefKind) -> Self {
+        Self { kind }
+    }
+}
+
 impl fmt::Debug for Def {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.kind {
-            DefKind::Function(ref func) => writeln!(f, "{:?}", func),
+            DefKind::Type(ref tp) => writeln!(f, "{:?}", tp),
+            DefKind::Func(ref func) => writeln!(f, "{:?}", func),
         }
     }
 }
 
-impl fmt::Debug for Function {
+impl fmt::Debug for TypeDef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Type ")?;
+        match self.kind {
+            TypeDefKind::Int => writeln!(f, "Int"),
+        }
+    }
+}
+
+impl fmt::Debug for FuncDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Function {}", self.name)?;
         for param in &self.params {
@@ -96,6 +138,10 @@ impl fmt::Debug for Function {
 }
 
 impl Expr {
+    pub fn new(kind: ExprKind) -> Self {
+        Self { kind }
+    }
+
     fn debug_fmt(&self, f: &mut fmt::Formatter, ind: i32) -> fmt::Result {
         for _ in 0..ind {
             write!(f, "{}", INDENT)?;
@@ -142,7 +188,7 @@ impl Expr {
                 writeln!(f, "Int {}", i)?;
             }
             ExprKind::Id(ref id) => {
-                writeln!(f, "Id {}", id)?;
+                writeln!(f, "Id {:?}", id)?;
             }
             ExprKind::Noop => {
                 writeln!(f, "Noop")?;
@@ -158,12 +204,24 @@ impl fmt::Debug for Expr {
     }
 }
 
+impl Type {
+    pub fn new(kind: TypeKind) -> Self {
+        Self { kind }
+    }
+}
+
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Type::Named { ref path } => write!(f, "{:?}", path),
-            Type::Void => write!(f, "Void"),
+        match self.kind {
+            TypeKind::Named { ref path } => write!(f, "{:?}", path),
+            TypeKind::Void => write!(f, "Void"),
         }
+    }
+}
+
+impl Path {
+    pub fn new(name: String) -> Self {
+        Self { name, id: Index::INVALID }
     }
 }
 
@@ -173,8 +231,22 @@ impl fmt::Debug for Path {
     }
 }
 
+impl Binding {
+    pub fn new(name: String, tp: Type) -> Self {
+        Self { name, tp }
+    }
+}
+
 impl fmt::Debug for Binding {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} {:?}", self.name, self.tp)
+    }
+}
+
+impl Index {
+    const INVALID: Index = Index(usize::MAX);
+
+    pub fn new(val: usize) -> Self {
+        Index(val)
     }
 }

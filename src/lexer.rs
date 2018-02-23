@@ -1,65 +1,32 @@
 use std::fmt;
+use std::io;
 use std::iter;
 use std::num;
 use std::result;
 
-#[derive(Copy, Clone, Debug)]
-pub struct Pos {
-    pub line: i32,
-    pub column: i32,
-}
+use token::*;
 
-#[derive(Copy, Clone, Debug)]
-pub struct Span {
-    pub start: Pos,
-    pub end: Pos,
-}
-
-#[derive(Clone, Debug)]
-pub struct Token {
-    pub span: Span,
-    pub kind: TokenKind,
-}
-
-#[derive(Clone, Debug)]
-pub enum TokenKind {
-    Def,
-    As,
-    If,
-    Then,
-    Elif,
-    Else,
-    Let,
-    Comma,
-    Period,
-    Arrow,
-    LParen,
-    RParen,
-    Quote,
-    Operator(String),
-    Id(String),
-    Int(i32),
-}
-
-pub enum Error {
-    ParseInt(num::ParseIntError),
-    UnexpectedChar(char),
-}
-
-pub struct Lexer<Iter: Iterator<Item = char>> {
+struct Lexer<Iter: Iterator<Item = char>> {
     source: iter::Peekable<Iter>,
     pos: Pos,
 }
 
-type Result<T> = result::Result<T, Error>;
+pub enum Error {
+    Io(io::Error),
+    ParseInt(num::ParseIntError),
+    UnexpectedChar(char),
+}
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::ParseInt(ref err) => write!(f, "{}", err),
-            Error::UnexpectedChar(ch) => write!(f, "unexpected character '{}'", ch),
-        }
-    }
+pub type Result<T> = result::Result<T, Error>;
+
+pub fn lex<In>(mut input: In) -> Result<Vec<Token>>
+where
+    In: io::Read,
+{
+    let mut src = String::new();
+    input.read_to_string(&mut src)?;
+    let lex = Lexer::new(src.chars());
+    lex.collect()
 }
 
 impl<Iter> Lexer<Iter>
@@ -177,5 +144,21 @@ where
             span: Span { start, end },
             kind,
         }))
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Io(ref err) => write!(f, "{}", err),
+            Error::ParseInt(ref err) => write!(f, "{}", err),
+            Error::UnexpectedChar(ch) => write!(f, "unexpected character '{}'", ch),
+        }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::Io(err)
     }
 }

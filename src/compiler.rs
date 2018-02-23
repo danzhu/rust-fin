@@ -1,11 +1,14 @@
-use std::io;
 use std::fmt;
+use std::io;
 use std::result;
 
-use lexer::{self, Lexer};
-use parser::{self, Parser};
+use store;
+use lexer;
+use parser;
 
-pub struct Compiler {}
+pub struct Compiler {
+    store: store::Store,
+}
 
 pub enum Error {
     Lexer(lexer::Error),
@@ -45,29 +48,21 @@ impl fmt::Display for Error {
 
 impl Compiler {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            store: store::Store::new(),
+        }
     }
 
-    pub fn compile<In, Out>(&self, mut input: In, mut output: Out) -> Result
+    pub fn compile<In, Out>(&mut self, input: In, mut output: Out) -> Result
     where
         In: io::Read,
         Out: io::Write,
     {
-        // lex
-        let tokens = {
-            let mut src = String::new();
-            input.read_to_string(&mut src)?;
-            let lex = Lexer::new(src.chars());
-            lex.collect::<result::Result<Vec<_>, _>>()?
-        };
+        let tokens = lexer::lex(input)?;
+        let source = parser::parse(tokens.into_iter())?;
+        self.store.define(source);
 
-        // parse
-        let module = {
-            let mut par = Parser::new(tokens.into_iter());
-            par.parse()?
-        };
-
-        write!(output, "{:?}", module)?;
+        write!(output, "{:?}", self.store)?;
 
         Ok(())
     }

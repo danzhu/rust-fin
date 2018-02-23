@@ -1,4 +1,7 @@
+mod token;
 mod ast;
+mod store;
+
 mod compiler;
 mod lexer;
 mod parser;
@@ -9,7 +12,7 @@ use std::process;
 use compiler::Compiler;
 
 fn run() -> i32 {
-    let comp = Compiler::new();
+    let mut comp = Compiler::new();
     let res = comp.compile(io::stdin(), io::stdout());
 
     if let Err(err) = res {
