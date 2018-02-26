@@ -315,7 +315,7 @@ impl fmt::Debug for Binding {
 }
 
 impl Index {
-    const INVALID: Index = Index(usize::MAX);
+    pub const INVALID: Index = Index(usize::MAX);
 
     pub fn new(val: usize) -> Self {
         Index(val)

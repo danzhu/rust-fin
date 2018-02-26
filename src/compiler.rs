@@ -70,7 +70,8 @@ impl Compiler {
         let tokens = lexer::lex(input)?;
         let source = parser::parse(tokens.into_iter())?;
         self.store.define(source);
-        resolver::resolve(&mut self.store)?;
+        resolver::resolve_decls(&mut self.store)?;
+        resolver::resolve_defs(&mut self.store)?;
 
         write!(output, "{:?}", self.store)?;
 

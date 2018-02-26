@@ -9,27 +9,66 @@ struct Resolver<'a> {
 }
 
 pub enum Error {
-    TypeNotFound(Path),
-    FuncNotFound(Path),
+    SymbolNotFound(&'static str, Path),
+    WrongSymbolKind(&'static str, Symbol),
 }
 
 pub type Result<T> = result::Result<T, Error>;
 
-pub fn resolve(store: &mut Store) -> Result<()> {
+macro_rules! expect_sym {
+    ($store:expr, $path:expr, $kind:ident) => {{
+        let path = $path;
+        match $store.get_sym(path) {
+            Some(Symbol::$kind(idx)) => idx,
+            Some(sym) => return Err(Error::WrongSymbolKind(stringify!($kind), sym)),
+            None => return Err(Error::SymbolNotFound(stringify!($kind), path.clone())),
+        }
+    }}
+}
+
+pub fn resolve_decls(store: &mut Store) -> Result<()> {
     store.func_defs = {
         let res = Resolver { store };
         store
             .func_defs
             .clone()
             .into_iter()
-            .map(|func| res.resolve(func))
+            .map(|func| res.resolve_decl(func))
+            .collect::<result::Result<Vec<_>, _>>()?
+    };
+    Ok(())
+}
+
+pub fn resolve_defs(store: &mut Store) -> Result<()> {
+    store.func_defs = {
+        let res = Resolver { store };
+        store
+            .func_defs
+            .clone()
+            .into_iter()
+            .map(|func| res.resolve_def(func))
             .collect::<result::Result<Vec<_>, _>>()?
     };
     Ok(())
 }
 
 impl<'a> Resolver<'a> {
-    fn resolve(&self, func: FuncDef) -> Result<FuncDef> {
+    fn resolve_decl(&self, func: FuncDef) -> Result<FuncDef> {
+        let params = func.params
+            .into_iter()
+            .map(|param| self.resolve_binding(param))
+            .collect::<result::Result<Vec<_>, _>>()?;
+
+        let ret = self.resolve_type(func.ret)?;
+
+        Ok(FuncDef {
+            params,
+            ret,
+            ..func
+        })
+    }
+
+    fn resolve_def(&self, func: FuncDef) -> Result<FuncDef> {
         let body = func.body.map_pre(&|expr: Expr| {
             let kind = match expr.kind {
                 ExprKind::Function { func, args } => ExprKind::Function {
@@ -41,17 +80,8 @@ impl<'a> Resolver<'a> {
             Ok(Expr { kind, ..expr })
         })?;
 
-        let params = func.params
-            .into_iter()
-            .map(|param| self.resolve_binding(param))
-            .collect::<result::Result<Vec<_>, _>>()?;
-
-        let ret = self.resolve_type(func.ret)?;
-
         Ok(FuncDef {
             body,
-            params,
-            ret,
             ..func
         })
     }
@@ -66,9 +96,7 @@ impl<'a> Resolver<'a> {
     fn resolve_type(&self, tp: Type) -> Result<Type> {
         let kind = match tp.kind {
             TypeKind::Named { path } => {
-                let index = self.store
-                    .type_index(&path)
-                    .ok_or_else(|| Error::TypeNotFound(path.clone()))?;
+                let index = expect_sym!(self.store, &path, Type);
                 TypeKind::Named {
                     path: Path { index, ..path },
                 }
@@ -79,9 +107,7 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_func(&self, func: Func) -> Result<Func> {
-        let index = self.store
-            .func_index(&func.path)
-            .ok_or_else(|| Error::FuncNotFound(func.path.clone()))?;
+        let index = expect_sym!(self.store, &func.path, Func);
         Ok(Func {
             path: Path { index, ..func.path },
             ..func
@@ -92,8 +118,8 @@ impl<'a> Resolver<'a> {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::TypeNotFound(ref path) => write!(f, "type not found: '{}'", path),
-            Error::FuncNotFound(ref path) => write!(f, "func not found: '{}'", path),
+            Error::SymbolNotFound(exp, ref path) => write!(f, "{} not found: '{}'", exp, path),
+            Error::WrongSymbolKind(exp, got) => write!(f, "expect {}, got {:?}", exp, got),
         }
     }
 }
