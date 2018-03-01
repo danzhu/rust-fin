@@ -157,41 +157,44 @@ impl Expr {
         Self { kind }
     }
 
-    pub fn map_pre<E, Map>(self, map: &Map) -> Result<Expr, E>
+    pub fn for_each_expr<E, Act>(&mut self, mut act: Act) -> Result<(), E>
     where
-        Map: Fn(Expr) -> Result<Expr, E>,
+        Act: FnMut(&mut Expr) -> Result<(), E>,
     {
-        let expr = map(self)?;
-        let kind = match expr.kind {
-            ExprKind::Seq { first, second } => ExprKind::Seq {
-                first: Box::new(first.map_pre(map)?),
-                second: Box::new(second.map_pre(map)?),
+        match self.kind {
+            ExprKind::Seq {
+                ref mut first,
+                ref mut second,
+            } => {
+                act(first)?;
+                act(second)?;
+            }
+            ExprKind::Let { ref mut value, .. } => {
+                act(value)?;
+            }
+            ExprKind::Function { ref mut args, .. } => for arg in args {
+                act(arg)?;
             },
-            ExprKind::Let { value, var } => ExprKind::Let {
-                value: Box::new(value.map_pre(map)?),
-                var,
-            },
-            ExprKind::Function { func, args } => ExprKind::Function {
-                func,
-                args: args.into_iter()
-                    .map(|arg| arg.map_pre(map))
-                    .collect::<Result<Vec<_>, _>>()?,
-            },
-            ExprKind::Binary { op, left, right } => ExprKind::Binary {
-                op,
-                left: Box::new(left.map_pre(map)?),
-                right: Box::new(right.map_pre(map)?),
-            },
-            ExprKind::If { cond, succ, fail } => ExprKind::If {
-                cond: Box::new(cond.map_pre(map)?),
-                succ: Box::new(succ.map_pre(map)?),
-                fail: Box::new(fail.map_pre(map)?),
-            },
-            ExprKind::Int(i) => ExprKind::Int(i),
-            ExprKind::Id(id) => ExprKind::Id(id),
-            ExprKind::Noop => ExprKind::Noop,
-        };
-        Ok(Expr { kind, ..expr })
+            ExprKind::Binary {
+                ref mut left,
+                ref mut right,
+                ..
+            } => {
+                act(left)?;
+                act(right)?;
+            }
+            ExprKind::If {
+                ref mut cond,
+                ref mut succ,
+                ref mut fail,
+            } => {
+                act(cond)?;
+                act(succ)?;
+                act(fail)?;
+            }
+            ExprKind::Int(_) | ExprKind::Id(_) | ExprKind::Noop => {}
+        }
+        Ok(())
     }
 
     fn debug_fmt(&self, f: &mut fmt::Formatter, ind: i32) -> fmt::Result {

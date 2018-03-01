@@ -13,11 +13,11 @@ pub enum Error {
     WrongSymbolKind(&'static str, Symbol),
 }
 
-pub type Result<T> = result::Result<T, Error>;
+pub type Result = result::Result<(), Error>;
 
 macro_rules! expect_sym {
     ($store:expr, $path:expr, $kind:ident) => {{
-        let path = $path;
+        let path: &Path = $path;
         match $store.get_sym(path) {
             Some(Symbol::$kind(idx)) => idx,
             Some(sym) => return Err(Error::WrongSymbolKind(stringify!($kind), sym)),
@@ -26,92 +26,73 @@ macro_rules! expect_sym {
     }}
 }
 
-pub fn resolve_decls(store: &mut Store) -> Result<()> {
-    store.func_defs = {
+pub fn resolve_decls(store: &mut Store) -> Result {
+    let mut func_defs = store.func_defs.clone();
+    {
         let res = Resolver { store };
-        store
-            .func_defs
-            .clone()
-            .into_iter()
-            .map(|func| res.resolve_decl(func))
-            .collect::<result::Result<Vec<_>, _>>()?
-    };
+        for func in &mut func_defs {
+            res.resolve_decl(func)?;
+        }
+    }
+    store.func_defs = func_defs;
     Ok(())
 }
 
-pub fn resolve_defs(store: &mut Store) -> Result<()> {
-    store.func_defs = {
+pub fn resolve_defs(store: &mut Store) -> Result {
+    let mut func_defs = store.func_defs.clone();
+    {
         let res = Resolver { store };
-        store
-            .func_defs
-            .clone()
-            .into_iter()
-            .map(|func| res.resolve_def(func))
-            .collect::<result::Result<Vec<_>, _>>()?
-    };
+        for func in &mut func_defs {
+            res.resolve_def(func)?;
+        }
+    }
+    store.func_defs = func_defs;
     Ok(())
 }
 
 impl<'a> Resolver<'a> {
-    fn resolve_decl(&self, func: FuncDef) -> Result<FuncDef> {
-        let params = func.params
-            .into_iter()
-            .map(|param| self.resolve_binding(param))
-            .collect::<result::Result<Vec<_>, _>>()?;
-
-        let ret = self.resolve_type(func.ret)?;
-
-        Ok(FuncDef {
-            params,
-            ret,
-            ..func
-        })
+    fn resolve_decl(&self, func: &mut FuncDef) -> Result {
+        for param in &mut func.params {
+            self.resolve_binding(param)?;
+        }
+        self.resolve_type(&mut func.ret)?;
+        Ok(())
     }
 
-    fn resolve_def(&self, func: FuncDef) -> Result<FuncDef> {
-        let body = func.body.map_pre(&|expr: Expr| {
-            let kind = match expr.kind {
-                ExprKind::Function { func, args } => ExprKind::Function {
-                    func: self.resolve_func(func)?,
-                    args,
-                },
-                kind => kind,
-            };
-            Ok(Expr { kind, ..expr })
-        })?;
-
-        Ok(FuncDef {
-            body,
-            ..func
-        })
+    fn resolve_def(&self, func: &mut FuncDef) -> Result {
+        self.resolve_expr(&mut func.body)?;
+        Ok(())
     }
 
-    fn resolve_binding(&self, bind: Binding) -> Result<Binding> {
-        Ok(Binding {
-            tp: self.resolve_type(bind.tp)?,
-            ..bind
-        })
-    }
-
-    fn resolve_type(&self, tp: Type) -> Result<Type> {
-        let kind = match tp.kind {
-            TypeKind::Named { path } => {
-                let index = expect_sym!(self.store, &path, Type);
-                TypeKind::Named {
-                    path: Path { index, ..path },
-                }
+    fn resolve_expr(&self, expr: &mut Expr) -> Result {
+        match expr.kind {
+            ExprKind::Function { ref mut func, .. } => {
+                self.resolve_func(func)?;
             }
-            _ => unimplemented!(),
-        };
-        Ok(Type { kind, ..tp })
+            _ => {}
+        }
+        expr.for_each_expr(|expr| self.resolve_expr(expr))?;
+        Ok(())
     }
 
-    fn resolve_func(&self, func: Func) -> Result<Func> {
-        let index = expect_sym!(self.store, &func.path, Func);
-        Ok(Func {
-            path: Path { index, ..func.path },
-            ..func
-        })
+    fn resolve_binding(&self, bind: &mut Binding) -> Result {
+        self.resolve_type(&mut bind.tp)?;
+        Ok(())
+    }
+
+    fn resolve_type(&self, tp: &mut Type) -> Result {
+        match tp.kind {
+            TypeKind::Named { ref mut path } => {
+                path.index = expect_sym!(self.store, path, Type);
+            }
+            TypeKind::Void => {}
+        }
+        Ok(())
+    }
+
+    fn resolve_func(&self, func: &mut Func) -> Result {
+        func.path.index = expect_sym!(self.store, &func.path, Func);
+        Ok(())
     }
 }
 
