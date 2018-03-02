@@ -17,6 +17,15 @@ pub enum Symbol {
     Func(Index),
 }
 
+macro_rules! define_tp {
+    ($store:expr, $name:ident) => {
+        $store.define_type(TypeDef {
+            name: stringify!($name).to_string(),
+            kind: TypeDefKind::$name,
+        })
+    }
+}
+
 impl Store {
     pub fn new() -> Self {
         let mut store = Store {
@@ -27,10 +36,7 @@ impl Store {
             type_int: Index::INVALID,
         };
 
-        store.type_int = store.define_type(TypeDef {
-            name: "Int".to_string(),
-            kind: TypeDefKind::Int,
-        });
+        store.type_int = define_tp!(store, Int);
 
         store
     }
@@ -66,10 +72,10 @@ impl Store {
 impl fmt::Debug for Store {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for tp in &self.type_defs {
-            writeln!(f, "{:?}", tp)?;
+            writeln!(f, "Type {:?}", tp)?;
         }
         for func in &self.func_defs {
-            writeln!(f, "{:?}", func)?;
+            writeln!(f, "Function {:?}", func)?;
         }
         Ok(())
     }

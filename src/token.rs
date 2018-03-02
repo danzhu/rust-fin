@@ -1,14 +1,4 @@
-#[derive(Copy, Clone, Debug)]
-pub struct Pos {
-    pub line: i32,
-    pub column: i32,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Span {
-    pub start: Pos,
-    pub end: Pos,
-}
+use common::*;
 
 #[derive(Clone, Debug)]
 pub struct Token {
@@ -31,7 +21,8 @@ pub enum TokenKind {
     LParen,
     RParen,
     Quote,
-    Operator(String),
+    Not,
+    Operator(Op),
     Id(String),
     Int(i32),
 }

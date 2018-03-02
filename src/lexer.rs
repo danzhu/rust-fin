@@ -4,6 +4,7 @@ use std::iter;
 use std::num;
 use std::result;
 
+use common::*;
 use token::*;
 
 struct Lexer<Iter: Iterator<Item = char>> {
@@ -123,13 +124,23 @@ where
             self.read();
             match ch {
                 '\'' => TokenKind::Quote,
-                '+' | '*' | '/' | '%' | '=' => TokenKind::Operator(ch.to_string()),
                 '-' => if let Some(&'>') = self.source.peek() {
                     self.read();
                     TokenKind::Arrow
                 } else {
-                    TokenKind::Operator(ch.to_string())
+                    TokenKind::Operator(Op::Sub)
                 },
+                '!' => if let Some(&'=') = self.source.peek() {
+                    self.read();
+                    TokenKind::Operator(Op::Ne)
+                } else {
+                    TokenKind::Not
+                },
+                '+' => TokenKind::Operator(Op::Add),
+                '*' => TokenKind::Operator(Op::Mul),
+                '/' => TokenKind::Operator(Op::Div),
+                '%' => TokenKind::Operator(Op::Mod),
+                '=' => TokenKind::Operator(Op::Eq),
                 ',' => TokenKind::Comma,
                 '.' => TokenKind::Period,
                 '(' => TokenKind::LParen,

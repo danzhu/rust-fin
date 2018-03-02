@@ -55,29 +55,23 @@ impl<'a> Resolver<'a> {
         for param in &mut func.params {
             self.resolve_binding(param)?;
         }
-        self.resolve_type(&mut func.ret)?;
-        Ok(())
+        self.resolve_type(&mut func.ret)
     }
 
     fn resolve_def(&self, func: &mut FuncDef) -> Result {
-        self.resolve_expr(&mut func.body)?;
-        Ok(())
+        let FuncDefKind::Body(ref mut body) = func.kind;
+        self.resolve_expr(body)
     }
 
     fn resolve_expr(&self, expr: &mut Expr) -> Result {
-        match expr.kind {
-            ExprKind::Function { ref mut func, .. } => {
-                self.resolve_func(func)?;
-            }
-            _ => {}
+        if let ExprKind::Function { ref mut func, .. } = expr.kind {
+            self.resolve_func(func)?;
         }
-        expr.for_each_expr(|expr| self.resolve_expr(expr))?;
-        Ok(())
+        expr.for_each_expr(|expr| self.resolve_expr(expr))
     }
 
     fn resolve_binding(&self, bind: &mut Binding) -> Result {
-        self.resolve_type(&mut bind.tp)?;
-        Ok(())
+        self.resolve_type(&mut bind.tp)
     }
 
     fn resolve_type(&self, tp: &mut Type) -> Result {

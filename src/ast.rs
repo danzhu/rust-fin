@@ -1,6 +1,8 @@
 use std::fmt;
 use std::usize;
 
+use common::*;
+
 const INDENT: &str = "  ";
 
 #[derive(Clone)]
@@ -35,7 +37,12 @@ pub struct FuncDef {
     pub name: String,
     pub params: Vec<Binding>,
     pub ret: Type,
-    pub body: Expr,
+    pub kind: FuncDefKind,
+}
+
+#[derive(Clone)]
+pub enum FuncDefKind {
+    Body(Expr),
 }
 
 #[derive(Clone)]
@@ -58,7 +65,7 @@ pub enum ExprKind {
         args: Vec<Expr>,
     },
     Binary {
-        op: String,
+        op: Op,
         left: Box<Expr>,
         right: Box<Expr>,
     },
@@ -111,8 +118,8 @@ impl Source {
 
 impl fmt::Debug for Source {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for func in &self.defs {
-            write!(f, "{:?}", func)?;
+        for def in &self.defs {
+            write!(f, "{:?}", def)?;
         }
         Ok(())
     }
@@ -127,8 +134,8 @@ impl Def {
 impl fmt::Debug for Def {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.kind {
-            DefKind::Type(ref tp) => writeln!(f, "{:?}", tp),
-            DefKind::Func(ref func) => writeln!(f, "{:?}", func),
+            DefKind::Type(ref tp) => writeln!(f, "Type {:?}", tp),
+            DefKind::Func(ref func) => writeln!(f, "Function {:?}", func),
         }
     }
 }
@@ -143,12 +150,14 @@ impl fmt::Debug for TypeDef {
 
 impl fmt::Debug for FuncDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Function {}", self.name)?;
+        writeln!(f, "{}", self.name)?;
         for param in &self.params {
             writeln!(f, "{}Param {:?}", INDENT, param)?;
         }
         writeln!(f, "{}Ret {:?}", INDENT, self.ret)?;
-        write!(f, "{:?}", self.body)
+        match self.kind {
+            FuncDefKind::Body(ref body) => write!(f, "{:?}", body),
+        }
     }
 }
 
@@ -225,7 +234,7 @@ impl Expr {
                 ref left,
                 ref right,
             } => {
-                writeln!(f, "Binary {}", op)?;
+                writeln!(f, "Binary {:?}", op)?;
                 left.debug_fmt(f, ind + 1)?;
                 right.debug_fmt(f, ind + 1)?;
             }

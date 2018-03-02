@@ -97,7 +97,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             name,
             params,
             ret,
-            body,
+            kind: FuncDefKind::Body(body),
         })
     }
 
