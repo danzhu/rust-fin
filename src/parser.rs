@@ -89,30 +89,20 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
         expect_token!(self, TokenKind::As);
 
-        let body = self.seq()?;
+        let body = self.block()?;
 
         expect_token!(self, TokenKind::Period);
 
-        Ok(FuncDef {
-            name,
-            params,
-            ret,
-            kind: FuncDefKind::Body(body),
-        })
+        Ok(FuncDef::new(name, params, ret, body))
     }
 
-    fn seq(&mut self) -> Result<Expr> {
-        let expr = self.statement()?;
-        if let Some(&TokenKind::Comma) = self.peek() {
+    fn block(&mut self) -> Result<Expr> {
+        let mut stmts = vec![self.statement()?];
+        while let Some(&TokenKind::Comma) = self.peek() {
             self.next();
-            let seq = self.seq()?;
-            Ok(Expr::new(ExprKind::Seq {
-                first: Box::new(expr),
-                second: Box::new(seq),
-            }))
-        } else {
-            Ok(expr)
+            stmts.push(self.statement()?);
         }
+        Ok(Expr::new(ExprKind::Block { stmts }))
     }
 
     fn statement(&mut self) -> Result<Expr> {
@@ -189,24 +179,24 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 Ok(cond)
             }
             Some(TokenKind::LParen) => {
-                let seq = self.seq()?;
+                let block = self.block()?;
                 expect_token!(self, TokenKind::RParen);
-                Ok(seq)
+                Ok(block)
             }
             got => Err(Error::Expect("value", got)),
         }
     }
 
     fn cond(&mut self) -> Result<Expr> {
-        let cond = self.seq()?;
+        let cond = self.block()?;
 
         expect_token!(self, TokenKind::Then);
-        let succ = self.seq()?;
+        let succ = self.block()?;
 
         let fail = match self.peek() {
             Some(&TokenKind::Else) => {
                 self.next();
-                self.seq()?
+                self.block()?
             }
             Some(&TokenKind::Elif) => {
                 self.next();

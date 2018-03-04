@@ -19,10 +19,7 @@ pub enum Symbol {
 
 macro_rules! define_tp {
     ($store:expr, $name:ident) => {
-        $store.define_type(TypeDef {
-            name: stringify!($name).to_string(),
-            kind: TypeDefKind::$name,
-        })
+        $store.define_type(TypeDef::new(stringify!($name), TypeDefKind::$name))
     }
 }
 
@@ -33,7 +30,7 @@ impl Store {
             func_defs: Vec::new(),
             sym_table: HashMap::new(),
 
-            type_int: Index::INVALID,
+            type_int: Index::UNKNOWN,
         };
 
         store.type_int = define_tp!(store, Int);
@@ -48,8 +45,12 @@ impl Store {
     pub fn define(&mut self, src: Source) {
         for def in src.defs {
             match def.kind {
-                DefKind::Type(tp) => { self.define_type(tp); },
-                DefKind::Func(func) => { self.define_func(func); },
+                DefKind::Type(tp) => {
+                    self.define_type(tp);
+                }
+                DefKind::Func(func) => {
+                    self.define_func(func);
+                }
             }
         }
     }

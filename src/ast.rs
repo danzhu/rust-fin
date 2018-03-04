@@ -37,12 +37,8 @@ pub struct FuncDef {
     pub name: String,
     pub params: Vec<Binding>,
     pub ret: Type,
-    pub kind: FuncDefKind,
-}
-
-#[derive(Clone)]
-pub enum FuncDefKind {
-    Body(Expr),
+    pub body: Expr,
+    pub locals: Vec<Binding>,
 }
 
 #[derive(Clone)]
@@ -52,9 +48,8 @@ pub struct Expr {
 
 #[derive(Clone)]
 pub enum ExprKind {
-    Seq {
-        first: Box<Expr>,
-        second: Box<Expr>,
+    Block {
+        stmts: Vec<Expr>,
     },
     Let {
         value: Box<Expr>,
@@ -88,6 +83,7 @@ pub struct Type {
 pub enum TypeKind {
     Named { path: Path },
     Void,
+    Unknown,
 }
 
 #[derive(Clone)]
@@ -140,10 +136,37 @@ impl fmt::Debug for Def {
     }
 }
 
+impl TypeDef {
+    pub fn new<Str>(name: Str, kind: TypeDefKind) -> Self
+    where
+        Str: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            kind,
+        }
+    }
+}
+
 impl fmt::Debug for TypeDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.kind {
             TypeDefKind::Int => writeln!(f, "Int"),
+        }
+    }
+}
+
+impl FuncDef {
+    pub fn new<Str>(name: Str, params: Vec<Binding>, ret: Type, body: Expr) -> Self
+    where
+        Str: Into<String>,
+    {
+        Self {
+            name: name.into(),
+            params,
+            ret,
+            body,
+            locals: Vec::new(),
         }
     }
 }
@@ -155,9 +178,10 @@ impl fmt::Debug for FuncDef {
             writeln!(f, "{}Param {:?}", INDENT, param)?;
         }
         writeln!(f, "{}Ret {:?}", INDENT, self.ret)?;
-        match self.kind {
-            FuncDefKind::Body(ref body) => write!(f, "{:?}", body),
+        for local in &self.locals {
+            writeln!(f, "{}Local {:?}", INDENT, local)?;
         }
+        write!(f, "{:?}", self.body)
     }
 }
 
@@ -166,58 +190,16 @@ impl Expr {
         Self { kind }
     }
 
-    pub fn for_each_expr<E, Act>(&mut self, mut act: Act) -> Result<(), E>
-    where
-        Act: FnMut(&mut Expr) -> Result<(), E>,
-    {
-        match self.kind {
-            ExprKind::Seq {
-                ref mut first,
-                ref mut second,
-            } => {
-                act(first)?;
-                act(second)?;
-            }
-            ExprKind::Let { ref mut value, .. } => {
-                act(value)?;
-            }
-            ExprKind::Function { ref mut args, .. } => for arg in args {
-                act(arg)?;
-            },
-            ExprKind::Binary {
-                ref mut left,
-                ref mut right,
-                ..
-            } => {
-                act(left)?;
-                act(right)?;
-            }
-            ExprKind::If {
-                ref mut cond,
-                ref mut succ,
-                ref mut fail,
-            } => {
-                act(cond)?;
-                act(succ)?;
-                act(fail)?;
-            }
-            ExprKind::Int(_) | ExprKind::Id(_) | ExprKind::Noop => {}
-        }
-        Ok(())
-    }
-
     fn debug_fmt(&self, f: &mut fmt::Formatter, ind: i32) -> fmt::Result {
         for _ in 0..ind {
             write!(f, "{}", INDENT)?;
         }
         match self.kind {
-            ExprKind::Seq {
-                ref first,
-                ref second,
-            } => {
-                writeln!(f, "Seq")?;
-                first.debug_fmt(f, ind + 1)?;
-                second.debug_fmt(f, ind + 1)?;
+            ExprKind::Block { ref stmts } => {
+                writeln!(f, "Block")?;
+                for stmt in stmts {
+                    stmt.debug_fmt(f, ind + 1)?;
+                }
             }
             ExprKind::Let { ref value, ref var } => {
                 writeln!(f, "Let {}", var)?;
@@ -279,6 +261,7 @@ impl fmt::Debug for Type {
         match self.kind {
             TypeKind::Named { ref path } => write!(f, "{}", path),
             TypeKind::Void => write!(f, "Void"),
+            TypeKind::Unknown => write!(f, "Unknown"),
         }
     }
 }
@@ -299,7 +282,7 @@ impl Path {
     pub fn new(name: String) -> Self {
         Self {
             name,
-            index: Index::INVALID,
+            index: Index::UNKNOWN,
         }
     }
 }
@@ -307,7 +290,7 @@ impl Path {
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)?;
-        if self.index != Index::INVALID {
+        if self.index != Index::UNKNOWN {
             write!(f, "[{:?}]", self.index)?;
         }
         Ok(())
@@ -327,7 +310,7 @@ impl fmt::Debug for Binding {
 }
 
 impl Index {
-    pub const INVALID: Index = Index(usize::MAX);
+    pub const UNKNOWN: Index = Index(usize::MAX);
 
     pub fn new(val: usize) -> Self {
         Index(val)
