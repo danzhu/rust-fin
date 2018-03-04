@@ -1,5 +1,7 @@
 use std::fmt;
 use std::usize;
+use std::slice;
+use std::ops;
 
 use common::*;
 
@@ -38,7 +40,7 @@ pub struct FuncDef {
     pub params: Vec<Binding>,
     pub ret: Type,
     pub body: Expr,
-    pub locals: Vec<Binding>,
+    pub locals: List<Binding>,
 }
 
 #[derive(Clone)]
@@ -102,6 +104,11 @@ pub struct Path {
 pub struct Binding {
     pub name: String,
     pub tp: Type,
+}
+
+#[derive(Clone)]
+pub struct List<T> {
+    items: Vec<T>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -168,7 +175,7 @@ impl FuncDef {
             params,
             ret,
             body,
-            locals: Vec::new(),
+            locals: List::new(),
         }
     }
 }
@@ -322,16 +329,48 @@ impl fmt::Debug for Binding {
     }
 }
 
+impl<T> List<T> {
+    pub fn new() -> Self {
+        Self {
+            items: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, item: T) -> Index {
+        let idx = Index(self.items.len());
+        self.items.push(item);
+        idx
+    }
+}
+
+impl<T> ops::Index<Index> for List<T> {
+    type Output = T;
+
+    fn index(&self, idx: Index) -> &Self::Output {
+        &self.items[idx.0]
+    }
+}
+
+impl<'a, T> IntoIterator for &'a List<T> {
+    type IntoIter = slice::Iter<'a, T>;
+    type Item = &'a T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut List<T> {
+    type IntoIter = slice::IterMut<'a, T>;
+    type Item = &'a mut T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.iter_mut()
+    }
+}
+
 impl Index {
     pub const UNKNOWN: Index = Index(usize::MAX);
-
-    pub fn new(val: usize) -> Self {
-        Index(val)
-    }
-
-    pub fn value(&self) -> usize {
-        self.0
-    }
 }
 
 impl fmt::Debug for Index {

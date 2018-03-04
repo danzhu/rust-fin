@@ -4,8 +4,8 @@ use std::fmt;
 use ast::*;
 
 pub struct Store {
-    pub type_defs: Vec<TypeDef>,
-    pub func_defs: Vec<FuncDef>,
+    pub type_defs: List<TypeDef>,
+    pub func_defs: List<FuncDef>,
     pub sym_table: HashMap<String, Symbol>,
 
     pub def_int: Index,
@@ -31,8 +31,8 @@ macro_rules! define_tp {
 impl Store {
     pub fn new() -> Self {
         let mut store = Store {
-            type_defs: Vec::new(),
-            func_defs: Vec::new(),
+            type_defs: List::new(),
+            func_defs: List::new(),
             sym_table: HashMap::new(),
 
             def_int: Index::UNKNOWN,
@@ -62,16 +62,16 @@ impl Store {
     }
 
     fn define_type(&mut self, tp: TypeDef) -> Index {
-        let idx = Index::new(self.type_defs.len());
-        self.sym_table.insert(tp.name.clone(), Symbol::Type(idx));
-        self.type_defs.push(tp);
+        let name = tp.name.clone();
+        let idx = self.type_defs.push(tp);
+        self.sym_table.insert(name, Symbol::Type(idx));
         idx
     }
 
     fn define_func(&mut self, func: FuncDef) -> Index {
-        let idx = Index::new(self.func_defs.len());
-        self.sym_table.insert(func.name.clone(), Symbol::Func(idx));
-        self.func_defs.push(func);
+        let name = func.name.clone();
+        let idx = self.func_defs.push(func);
+        self.sym_table.insert(name, Symbol::Func(idx));
         idx
     }
 }

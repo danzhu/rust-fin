@@ -8,7 +8,7 @@ use store::*;
 struct Resolver<'a> {
     store: &'a Store,
     refs: &'a RefTable,
-    locals: Vec<Binding>,
+    locals: List<Binding>,
 }
 
 type RefTable = Store;
@@ -26,7 +26,7 @@ enum SymTableParent<'a> {
 pub enum Error {
     SymbolNotFound(&'static str, Path),
     WrongSymbolKind(&'static str, Symbol),
-    TypeMismatch(Type, Type),
+    TypeMismatch { expect: Type, got: Type },
 }
 
 pub type Result = result::Result<(), Error>;
@@ -87,21 +87,31 @@ fn resolve_func(func: &mut Func, refs: &RefTable) -> Result {
     Ok(())
 }
 
+fn expect_tp(expect: &Type, got: &Type) -> Result {
+    if expect == got {
+        Ok(())
+    } else {
+        Err(Error::TypeMismatch {
+            expect: expect.clone(),
+            got: got.clone(),
+        })
+    }
+}
+
 impl<'a> Resolver<'a> {
     fn new(store: &'a Store, refs: &'a RefTable) -> Self {
         Self {
             store,
             refs,
-            locals: Vec::new(),
+            locals: List::new(),
         }
     }
 
     fn resolve(&mut self, func: &mut FuncDef) -> Result {
         let mut sym = SymTable::root(self.refs);
         for param in &mut func.params {
-            let index = self.locals.len();
-            sym.add(param.name.clone(), Index::new(index));
-            self.locals.push(param.clone());
+            let idx = self.locals.push(param.clone());
+            sym.add(param.name.clone(), idx);
         }
         self.resolve_expr(&mut func.body, &mut sym)
     }
@@ -125,10 +135,9 @@ impl<'a> Resolver<'a> {
             } => {
                 self.resolve_expr(value, sym)?;
 
-                let index = self.locals.len();
-                sym.add(var.clone(), Index::new(index));
-                self.locals
+                let idx = self.locals
                     .push(Binding::new(var.clone(), value.tp.clone()));
+                sym.add(var.clone(), idx);
 
                 expr.tp = Type::new(TypeKind::Void);
             }
@@ -137,11 +146,15 @@ impl<'a> Resolver<'a> {
                 ref mut args,
             } => {
                 resolve_func(func, self.refs)?;
-                for arg in args {
+                let def = &self.store.func_defs[func.path.index];
+
+                for (param, arg) in def.params.iter().zip(args) {
                     self.resolve_expr(arg, sym)?;
+
+                    expect_tp(&param.tp, &arg.tp)?;
                 }
 
-                expr.tp = self.store.func_defs[func.path.index.value()].ret.clone();
+                expr.tp = def.ret.clone();
             }
             ExprKind::Binary {
                 ref mut left,
@@ -151,9 +164,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(left, sym)?;
                 self.resolve_expr(right, sym)?;
 
-                if left.tp != right.tp {
-                    return Err(Error::TypeMismatch(left.tp.clone(), right.tp.clone()));
-                }
+                expect_tp(&left.tp, &right.tp)?;
                 expr.tp = left.tp.clone();
             }
             ExprKind::If {
@@ -165,21 +176,22 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(succ, sym)?;
                 self.resolve_expr(fail, sym)?;
 
-                if succ.tp != fail.tp {
-                    return Err(Error::TypeMismatch(succ.tp.clone(), fail.tp.clone()));
-                }
+                expect_tp(&self.store.type_int, &cond.tp)?;
+                expect_tp(&succ.tp, &fail.tp)?;
                 expr.tp = succ.tp.clone();
             }
             ExprKind::Id(ref mut path) => {
                 path.index = sym.get(&path.name)
                     .ok_or_else(|| Error::SymbolNotFound("Id", path.clone()))?;
 
-                expr.tp = self.locals[path.index.value()].tp.clone();
+                expr.tp = self.locals[path.index].tp.clone();
             }
             ExprKind::Int(_) => {
                 expr.tp = self.refs.type_int.clone();
             }
-            ExprKind::Noop => {}
+            ExprKind::Noop => {
+                expr.tp = Type::new(TypeKind::Void);
+            }
         }
         Ok(())
     }
@@ -205,26 +217,25 @@ impl<'a> SymTable<'a> {
     }
 
     fn get(&self, name: &str) -> Option<Index> {
-        if let Some(&idx) = self.symbols.get(name) {
-            return Some(idx);
+        match (self.symbols.get(name), &self.parent) {
+            (Some(&idx), _) => Some(idx),
+            (None, &SymTableParent::Table(parent)) => parent.get(name),
+            _ => None,
         }
-
-        if let SymTableParent::Table(parent) = self.parent {
-            return parent.get(name);
-        }
-
-        None
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::SymbolNotFound(exp, ref path) => write!(f, "{} not found: '{}'", exp, path),
-            Error::WrongSymbolKind(exp, got) => write!(f, "expect {}, got {:?}", exp, got),
-            Error::TypeMismatch(ref left, ref right) => {
-                write!(f, "{:?} and {:?} type mismatch", left, right)
+            Error::SymbolNotFound(exp, ref path) => {
+                write!(f, "{} symbol not found: '{}'", exp, path)
             }
+            Error::WrongSymbolKind(exp, got) => write!(f, "expect {} symbol, got {:?}", exp, got),
+            Error::TypeMismatch {
+                ref expect,
+                ref got,
+            } => write!(f, "expect type {:?}, got {:?}", expect, got),
         }
     }
 }
