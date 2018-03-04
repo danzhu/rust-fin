@@ -8,7 +8,8 @@ pub struct Store {
     pub func_defs: Vec<FuncDef>,
     pub sym_table: HashMap<String, Symbol>,
 
-    pub type_int: Index,
+    pub def_int: Index,
+    pub type_int: Type,
 }
 
 #[derive(Copy, Clone)]
@@ -18,9 +19,13 @@ pub enum Symbol {
 }
 
 macro_rules! define_tp {
-    ($store:expr, $name:ident) => {
-        $store.define_type(TypeDef::new(stringify!($name), TypeDefKind::$name))
-    }
+    ($store:expr, $def:ident, $type:ident, $name:ident) => {{
+        let idx = $store.define_type(TypeDef::new(stringify!($name), TypeDefKind::$name));
+        let mut path = Path::new(stringify!($name));
+        path.index = idx;
+        $store.$def = idx;
+        $store.$type = Type::new(TypeKind::Named { path });
+    }}
 }
 
 impl Store {
@@ -30,10 +35,11 @@ impl Store {
             func_defs: Vec::new(),
             sym_table: HashMap::new(),
 
-            type_int: Index::UNKNOWN,
+            def_int: Index::UNKNOWN,
+            type_int: Type::new(TypeKind::Unknown),
         };
 
-        store.type_int = define_tp!(store, Int);
+        define_tp!(store, def_int, type_int, Int);
 
         store
     }
@@ -73,10 +79,10 @@ impl Store {
 impl fmt::Debug for Store {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for tp in &self.type_defs {
-            writeln!(f, "Type {:?}", tp)?;
+            writeln!(f, "{:?}", tp)?;
         }
         for func in &self.func_defs {
-            writeln!(f, "Function {:?}", func)?;
+            writeln!(f, "{:?}", func)?;
         }
         Ok(())
     }

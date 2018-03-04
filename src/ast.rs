@@ -44,6 +44,7 @@ pub struct FuncDef {
 #[derive(Clone)]
 pub struct Expr {
     pub kind: ExprKind,
+    pub tp: Type,
 }
 
 #[derive(Clone)]
@@ -74,12 +75,12 @@ pub enum ExprKind {
     Noop,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Type {
     pub kind: TypeKind,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum TypeKind {
     Named { path: Path },
     Void,
@@ -91,7 +92,7 @@ pub struct Func {
     pub path: Path,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Path {
     pub name: String,
     pub index: Index,
@@ -130,8 +131,8 @@ impl Def {
 impl fmt::Debug for Def {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.kind {
-            DefKind::Type(ref tp) => writeln!(f, "Type {:?}", tp),
-            DefKind::Func(ref func) => writeln!(f, "Function {:?}", func),
+            DefKind::Type(ref tp) => writeln!(f, "{:?}", tp),
+            DefKind::Func(ref func) => writeln!(f, "{:?}", func),
         }
     }
 }
@@ -150,6 +151,7 @@ impl TypeDef {
 
 impl fmt::Debug for TypeDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Type ")?;
         match self.kind {
             TypeDefKind::Int => writeln!(f, "Int"),
         }
@@ -173,13 +175,15 @@ impl FuncDef {
 
 impl fmt::Debug for FuncDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{}", self.name)?;
+        writeln!(f, "Function {}", self.name)?;
+        writeln!(f, "Params")?;
         for param in &self.params {
-            writeln!(f, "{}Param {:?}", INDENT, param)?;
+            writeln!(f, "{}{:?}", INDENT, param)?;
         }
-        writeln!(f, "{}Ret {:?}", INDENT, self.ret)?;
+        writeln!(f, "Ret {:?}", self.ret)?;
+        writeln!(f, "Locals")?;
         for local in &self.locals {
-            writeln!(f, "{}Local {:?}", INDENT, local)?;
+            writeln!(f, "{}{:?}", INDENT, local)?;
         }
         write!(f, "{:?}", self.body)
     }
@@ -187,13 +191,19 @@ impl fmt::Debug for FuncDef {
 
 impl Expr {
     pub fn new(kind: ExprKind) -> Self {
-        Self { kind }
+        Self {
+            kind,
+            tp: Type::new(TypeKind::Unknown),
+        }
     }
 
     fn debug_fmt(&self, f: &mut fmt::Formatter, ind: i32) -> fmt::Result {
         for _ in 0..ind {
             write!(f, "{}", INDENT)?;
         }
+
+        write!(f, "{:?} ", self.tp)?;
+
         match self.kind {
             ExprKind::Block { ref stmts } => {
                 writeln!(f, "Block")?;
@@ -246,7 +256,7 @@ impl Expr {
 
 impl fmt::Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.debug_fmt(f, 1)
+        self.debug_fmt(f, 0)
     }
 }
 
@@ -279,9 +289,12 @@ impl fmt::Debug for Func {
 }
 
 impl Path {
-    pub fn new(name: String) -> Self {
+    pub fn new<Str>(name: Str) -> Self
+    where
+        Str: Into<String>,
+    {
         Self {
-            name,
+            name: name.into(),
             index: Index::UNKNOWN,
         }
     }
@@ -314,6 +327,10 @@ impl Index {
 
     pub fn new(val: usize) -> Self {
         Index(val)
+    }
+
+    pub fn value(&self) -> usize {
+        self.0
     }
 }
 

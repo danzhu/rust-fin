@@ -7,8 +7,11 @@ use store::*;
 
 struct Resolver<'a> {
     store: &'a Store,
+    refs: &'a RefTable,
     locals: Vec<Binding>,
 }
+
+type RefTable = Store;
 
 struct SymTable<'a> {
     symbols: HashMap<String, Index>,
@@ -23,6 +26,7 @@ enum SymTableParent<'a> {
 pub enum Error {
     SymbolNotFound(&'static str, Path),
     WrongSymbolKind(&'static str, Symbol),
+    TypeMismatch(Type, Type),
 }
 
 pub type Result = result::Result<(), Error>;
@@ -40,8 +44,14 @@ macro_rules! expect_sym {
 
 pub fn resolve_decls(store: &mut Store) -> Result {
     let mut func_defs = store.func_defs.clone();
-    for func in &mut func_defs {
-        Resolver::new(store).resolve_decl(func)?;
+    {
+        let refs = &store;
+        for func in &mut func_defs {
+            for param in &mut func.params {
+                resolve_binding(param, refs)?;
+            }
+            resolve_type(&mut func.ret, refs)?;
+        }
     }
     store.func_defs = func_defs;
     Ok(())
@@ -50,32 +60,44 @@ pub fn resolve_decls(store: &mut Store) -> Result {
 pub fn resolve_defs(store: &mut Store) -> Result {
     let mut func_defs = store.func_defs.clone();
     for func in &mut func_defs {
-        let mut res = Resolver::new(store);
-        res.resolve_def(func)?;
+        let mut res = Resolver::new(store, store);
+        res.resolve(func)?;
         func.locals = res.locals;
     }
     store.func_defs = func_defs;
     Ok(())
 }
 
+fn resolve_binding(bind: &mut Binding, refs: &RefTable) -> Result {
+    resolve_type(&mut bind.tp, refs)
+}
+
+fn resolve_type(tp: &mut Type, refs: &RefTable) -> Result {
+    match tp.kind {
+        TypeKind::Named { ref mut path } => {
+            path.index = expect_sym!(refs, path, Type);
+        }
+        TypeKind::Void | TypeKind::Unknown => {}
+    }
+    Ok(())
+}
+
+fn resolve_func(func: &mut Func, refs: &RefTable) -> Result {
+    func.path.index = expect_sym!(refs, &func.path, Func);
+    Ok(())
+}
+
 impl<'a> Resolver<'a> {
-    fn new(store: &'a Store) -> Self {
+    fn new(store: &'a Store, refs: &'a RefTable) -> Self {
         Self {
             store,
+            refs,
             locals: Vec::new(),
         }
     }
 
-    fn resolve_decl(&mut self, func: &mut FuncDef) -> Result {
-        for param in &mut func.params {
-            self.resolve_binding(param)?;
-        }
-        self.resolve_type(&mut func.ret)
-    }
-
-    fn resolve_def(&mut self, func: &mut FuncDef) -> Result {
-        let sym = SymTable::root(self.store);
-        let mut sym = SymTable::new(&sym);
+    fn resolve(&mut self, func: &mut FuncDef) -> Result {
+        let mut sym = SymTable::root(self.refs);
         for param in &mut func.params {
             let index = self.locals.len();
             sym.add(param.name.clone(), Index::new(index));
@@ -88,28 +110,38 @@ impl<'a> Resolver<'a> {
         match expr.kind {
             ExprKind::Block { ref mut stmts } => {
                 let mut sym = SymTable::new(sym);
-                for stmt in stmts {
+                for stmt in stmts.iter_mut() {
                     self.resolve_expr(stmt, &mut sym)?;
                 }
+
+                expr.tp = match stmts.last() {
+                    Some(stmt) => stmt.tp.clone(),
+                    None => Type::new(TypeKind::Void),
+                };
             }
             ExprKind::Let {
                 ref mut value,
                 ref var,
             } => {
+                self.resolve_expr(value, sym)?;
+
                 let index = self.locals.len();
                 sym.add(var.clone(), Index::new(index));
                 self.locals
-                    .push(Binding::new(var.clone(), Type::new(TypeKind::Unknown)));
-                self.resolve_expr(value, sym)?;
+                    .push(Binding::new(var.clone(), value.tp.clone()));
+
+                expr.tp = Type::new(TypeKind::Void);
             }
             ExprKind::Function {
                 ref mut func,
                 ref mut args,
             } => {
-                self.resolve_func(func)?;
+                resolve_func(func, self.refs)?;
                 for arg in args {
                     self.resolve_expr(arg, sym)?;
                 }
+
+                expr.tp = self.store.func_defs[func.path.index.value()].ret.clone();
             }
             ExprKind::Binary {
                 ref mut left,
@@ -118,6 +150,11 @@ impl<'a> Resolver<'a> {
             } => {
                 self.resolve_expr(left, sym)?;
                 self.resolve_expr(right, sym)?;
+
+                if left.tp != right.tp {
+                    return Err(Error::TypeMismatch(left.tp.clone(), right.tp.clone()));
+                }
+                expr.tp = left.tp.clone();
             }
             ExprKind::If {
                 ref mut cond,
@@ -127,37 +164,23 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(cond, sym)?;
                 self.resolve_expr(succ, sym)?;
                 self.resolve_expr(fail, sym)?;
+
+                if succ.tp != fail.tp {
+                    return Err(Error::TypeMismatch(succ.tp.clone(), fail.tp.clone()));
+                }
+                expr.tp = succ.tp.clone();
             }
             ExprKind::Id(ref mut path) => {
-                self.resolve_id(path, sym)?;
+                path.index = sym.get(&path.name)
+                    .ok_or_else(|| Error::SymbolNotFound("Id", path.clone()))?;
+
+                expr.tp = self.locals[path.index.value()].tp.clone();
             }
-            ExprKind::Int(_) | ExprKind::Noop => {}
-        }
-        Ok(())
-    }
-
-    fn resolve_binding(&self, bind: &mut Binding) -> Result {
-        self.resolve_type(&mut bind.tp)
-    }
-
-    fn resolve_type(&self, tp: &mut Type) -> Result {
-        match tp.kind {
-            TypeKind::Named { ref mut path } => {
-                path.index = expect_sym!(self.store, path, Type);
+            ExprKind::Int(_) => {
+                expr.tp = self.refs.type_int.clone();
             }
-            TypeKind::Void | TypeKind::Unknown => {}
+            ExprKind::Noop => {}
         }
-        Ok(())
-    }
-
-    fn resolve_func(&self, func: &mut Func) -> Result {
-        func.path.index = expect_sym!(self.store, &func.path, Func);
-        Ok(())
-    }
-
-    fn resolve_id(&self, path: &mut Path, sym: &SymTable) -> Result {
-        path.index = sym.get(&path.name)
-            .ok_or_else(|| Error::SymbolNotFound("id", path.clone()))?;
         Ok(())
     }
 }
@@ -199,6 +222,9 @@ impl fmt::Display for Error {
         match *self {
             Error::SymbolNotFound(exp, ref path) => write!(f, "{} not found: '{}'", exp, path),
             Error::WrongSymbolKind(exp, got) => write!(f, "expect {}, got {:?}", exp, got),
+            Error::TypeMismatch(ref left, ref right) => {
+                write!(f, "{:?} and {:?} type mismatch", left, right)
+            }
         }
     }
 }
