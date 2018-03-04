@@ -108,20 +108,23 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve(&mut self, func: &mut FuncDef) -> Result {
-        let mut sym = SymTable::root(self.refs);
+        let mut syms = SymTable::root(self.refs);
         for param in &mut func.params {
             let idx = self.locals.push(param.clone());
-            sym.add(param.name.clone(), idx);
+            syms.add(param.name.clone(), idx);
         }
-        self.resolve_expr(&mut func.body, &mut sym)
+
+        self.resolve_expr(&mut func.body, &mut syms)?;
+
+        expect_tp(&func.ret, &func.body.tp)
     }
 
-    fn resolve_expr(&mut self, expr: &mut Expr, sym: &mut SymTable) -> Result {
+    fn resolve_expr(&mut self, expr: &mut Expr, syms: &mut SymTable) -> Result {
         match expr.kind {
             ExprKind::Block { ref mut stmts } => {
-                let mut sym = SymTable::new(sym);
+                let mut syms = SymTable::new(syms);
                 for stmt in stmts.iter_mut() {
-                    self.resolve_expr(stmt, &mut sym)?;
+                    self.resolve_expr(stmt, &mut syms)?;
                 }
 
                 expr.tp = match stmts.last() {
@@ -133,11 +136,11 @@ impl<'a> Resolver<'a> {
                 ref mut value,
                 ref var,
             } => {
-                self.resolve_expr(value, sym)?;
+                self.resolve_expr(value, syms)?;
 
                 let idx = self.locals
                     .push(Binding::new(var.clone(), value.tp.clone()));
-                sym.add(var.clone(), idx);
+                syms.add(var.clone(), idx);
 
                 expr.tp = Type::new(TypeKind::Void);
             }
@@ -149,7 +152,7 @@ impl<'a> Resolver<'a> {
                 let def = &self.store.func_defs[func.path.index];
 
                 for (param, arg) in def.params.iter().zip(args) {
-                    self.resolve_expr(arg, sym)?;
+                    self.resolve_expr(arg, syms)?;
 
                     expect_tp(&param.tp, &arg.tp)?;
                 }
@@ -161,8 +164,8 @@ impl<'a> Resolver<'a> {
                 ref mut right,
                 ..
             } => {
-                self.resolve_expr(left, sym)?;
-                self.resolve_expr(right, sym)?;
+                self.resolve_expr(left, syms)?;
+                self.resolve_expr(right, syms)?;
 
                 expect_tp(&left.tp, &right.tp)?;
                 expr.tp = left.tp.clone();
@@ -172,16 +175,16 @@ impl<'a> Resolver<'a> {
                 ref mut succ,
                 ref mut fail,
             } => {
-                self.resolve_expr(cond, sym)?;
-                self.resolve_expr(succ, sym)?;
-                self.resolve_expr(fail, sym)?;
+                self.resolve_expr(cond, syms)?;
+                self.resolve_expr(succ, syms)?;
+                self.resolve_expr(fail, syms)?;
 
                 expect_tp(&self.store.type_int, &cond.tp)?;
                 expect_tp(&succ.tp, &fail.tp)?;
                 expr.tp = succ.tp.clone();
             }
             ExprKind::Id(ref mut path) => {
-                path.index = sym.get(&path.name)
+                path.index = syms.get(&path.name)
                     .ok_or_else(|| Error::SymbolNotFound("Id", path.clone()))?;
 
                 expr.tp = self.locals[path.index].tp.clone();

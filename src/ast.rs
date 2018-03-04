@@ -19,7 +19,6 @@ pub struct Def {
 
 #[derive(Clone)]
 pub enum DefKind {
-    Type(TypeDef),
     Func(FuncDef),
 }
 
@@ -138,7 +137,6 @@ impl Def {
 impl fmt::Debug for Def {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.kind {
-            DefKind::Type(ref tp) => writeln!(f, "{:?}", tp),
             DefKind::Func(ref func) => writeln!(f, "{:?}", func),
         }
     }
@@ -204,66 +202,89 @@ impl Expr {
         }
     }
 
-    fn debug_fmt(&self, f: &mut fmt::Formatter, ind: i32) -> fmt::Result {
-        for _ in 0..ind {
-            write!(f, "{}", INDENT)?;
-        }
-
-        write!(f, "{:?} ", self.tp)?;
-
+    pub fn for_each<Act, E>(&self, mut act: Act) -> Result<(), E>
+    where
+        Act: FnMut(&Expr) -> Result<(), E>,
+    {
         match self.kind {
-            ExprKind::Block { ref stmts } => {
-                writeln!(f, "Block")?;
-                for stmt in stmts {
-                    stmt.debug_fmt(f, ind + 1)?;
-                }
+            ExprKind::Block { ref stmts } => for stmt in stmts {
+                act(stmt)?;
+            },
+            ExprKind::Let { ref value, .. } => {
+                act(value)?;
             }
-            ExprKind::Let { ref value, ref var } => {
-                writeln!(f, "Let {}", var)?;
-                value.debug_fmt(f, ind + 1)?;
-            }
-            ExprKind::Function { ref func, ref args } => {
-                writeln!(f, "Function {:?}", func)?;
-                for arg in args {
-                    arg.debug_fmt(f, ind + 1)?;
-                }
-            }
+            ExprKind::Function { ref args, .. } => for arg in args {
+                act(arg)?;
+            },
             ExprKind::Binary {
-                ref op,
                 ref left,
                 ref right,
+                ..
             } => {
-                writeln!(f, "Binary {:?}", op)?;
-                left.debug_fmt(f, ind + 1)?;
-                right.debug_fmt(f, ind + 1)?;
+                act(left)?;
+                act(right)?;
             }
             ExprKind::If {
                 ref cond,
                 ref succ,
                 ref fail,
             } => {
-                writeln!(f, "If")?;
-                cond.debug_fmt(f, ind + 1)?;
-                succ.debug_fmt(f, ind + 1)?;
-                fail.debug_fmt(f, ind + 1)?;
+                act(cond)?;
+                act(succ)?;
+                act(fail)?;
+            }
+            ExprKind::Int(_) | ExprKind::Id(_) | ExprKind::Noop => {}
+        }
+
+        Ok(())
+    }
+
+    fn info(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.kind {
+            ExprKind::Block { .. } => {
+                write!(f, "Block")?;
+            }
+            ExprKind::Let { ref var, .. } => {
+                write!(f, "Let {}", var)?;
+            }
+            ExprKind::Function { ref func, .. } => {
+                write!(f, "Function {:?}", func)?;
+            }
+            ExprKind::Binary { ref op, .. } => {
+                write!(f, "Binary {:?}", op)?;
+            }
+            ExprKind::If { .. } => {
+                write!(f, "If")?;
             }
             ExprKind::Int(i) => {
-                writeln!(f, "Int {}", i)?;
+                write!(f, "Int {}", i)?;
             }
             ExprKind::Id(ref id) => {
-                writeln!(f, "Id {}", id)?;
+                write!(f, "Id {}", id)?;
             }
             ExprKind::Noop => {
-                writeln!(f, "Noop")?;
+                write!(f, "Noop")?;
             }
         }
-        Ok(())
+
+        write!(f, " -> {:?}", self.tp)
     }
 }
 
 impl fmt::Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.debug_fmt(f, 0)
+        fn print(expr: &Expr, f: &mut fmt::Formatter, ind: i32) -> fmt::Result {
+            for _ in 0..ind {
+                write!(f, "{}", INDENT)?;
+            }
+
+            expr.info(f)?;
+            writeln!(f)?;
+
+            expr.for_each(|expr| print(expr, f, ind + 1))
+        }
+
+        print(self, f, 0)
     }
 }
 
@@ -331,9 +352,7 @@ impl fmt::Debug for Binding {
 
 impl<T> List<T> {
     pub fn new() -> Self {
-        Self {
-            items: Vec::new(),
-        }
+        Self { items: Vec::new() }
     }
 
     pub fn push(&mut self, item: T) -> Index {

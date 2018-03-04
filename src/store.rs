@@ -51,9 +51,6 @@ impl Store {
     pub fn define(&mut self, src: Source) {
         for def in src.defs {
             match def.kind {
-                DefKind::Type(tp) => {
-                    self.define_type(tp);
-                }
                 DefKind::Func(func) => {
                     self.define_func(func);
                 }
