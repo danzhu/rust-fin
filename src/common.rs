@@ -21,6 +21,8 @@ pub enum Op {
     Mod,
     Eq,
     Ne,
+    Lt,
+    Gt,
 }
 
 impl fmt::Debug for Op {
@@ -33,6 +35,8 @@ impl fmt::Debug for Op {
             Op::Mod => write!(f, "Mod"),
             Op::Eq => write!(f, "Eq"),
             Op::Ne => write!(f, "Ne"),
+            Op::Lt => write!(f, "Lt"),
+            Op::Gt => write!(f, "Gt"),
         }
     }
 }

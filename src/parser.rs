@@ -97,12 +97,17 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn block(&mut self) -> Result<Expr> {
-        let mut stmts = vec![self.statement()?];
-        while let Some(&TokenKind::Comma) = self.peek() {
-            self.next();
-            stmts.push(self.statement()?);
+        let stmt = self.statement()?;
+        if let Some(&TokenKind::Comma) = self.peek() {
+            let mut stmts = vec![stmt];
+            while let Some(&TokenKind::Comma) = self.peek() {
+                self.next();
+                stmts.push(self.statement()?);
+            }
+            Ok(Expr::new(ExprKind::Block { stmts }))
+        } else {
+            Ok(stmt)
         }
-        Ok(Expr::new(ExprKind::Block { stmts }))
     }
 
     fn statement(&mut self) -> Result<Expr> {

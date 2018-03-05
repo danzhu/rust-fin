@@ -26,6 +26,7 @@ enum SymTableParent<'a> {
 pub enum Error {
     SymbolNotFound(&'static str, Path),
     WrongSymbolKind(&'static str, Symbol),
+    ArgCount { expect: usize, got: usize },
     TypeMismatch { expect: Type, got: Type },
 }
 
@@ -122,9 +123,8 @@ impl<'a> Resolver<'a> {
     fn resolve_expr(&mut self, expr: &mut Expr, syms: &mut SymTable) -> Result {
         match expr.kind {
             ExprKind::Block { ref mut stmts } => {
-                let mut syms = SymTable::new(syms);
                 for stmt in stmts.iter_mut() {
-                    self.resolve_expr(stmt, &mut syms)?;
+                    self.resolve_expr(stmt, syms)?;
                 }
 
                 expr.tp = match stmts.last() {
@@ -151,6 +151,13 @@ impl<'a> Resolver<'a> {
                 resolve_func(func, self.refs)?;
                 let def = &self.store.func_defs[func.path.index];
 
+                if def.params.len() != args.len() {
+                    return Err(Error::ArgCount {
+                        expect: def.params.len(),
+                        got: args.len(),
+                    });
+                }
+
                 for (param, arg) in def.params.iter().zip(args) {
                     self.resolve_expr(arg, syms)?;
 
@@ -176,8 +183,12 @@ impl<'a> Resolver<'a> {
                 ref mut fail,
             } => {
                 self.resolve_expr(cond, syms)?;
-                self.resolve_expr(succ, syms)?;
-                self.resolve_expr(fail, syms)?;
+
+                let mut succ_syms = SymTable::new(syms);
+                self.resolve_expr(succ, &mut succ_syms)?;
+
+                let mut fail_syms = SymTable::new(syms);
+                self.resolve_expr(fail, &mut fail_syms)?;
 
                 expect_tp(&self.store.type_int, &cond.tp)?;
                 expect_tp(&succ.tp, &fail.tp)?;
@@ -235,6 +246,9 @@ impl fmt::Display for Error {
                 write!(f, "{} symbol not found: '{}'", exp, path)
             }
             Error::WrongSymbolKind(exp, got) => write!(f, "expect {} symbol, got {:?}", exp, got),
+            Error::ArgCount { expect, got } => {
+                write!(f, "expect {} arguments, got {}", expect, got)
+            }
             Error::TypeMismatch {
                 ref expect,
                 ref got,

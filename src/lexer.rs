@@ -141,6 +141,8 @@ where
                 '/' => TokenKind::Operator(Op::Div),
                 '%' => TokenKind::Operator(Op::Mod),
                 '=' => TokenKind::Operator(Op::Eq),
+                '<' => TokenKind::Operator(Op::Lt),
+                '>' => TokenKind::Operator(Op::Gt),
                 ',' => TokenKind::Comma,
                 '.' => TokenKind::Period,
                 '(' => TokenKind::LParen,

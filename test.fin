@@ -9,6 +9,9 @@ def fib n Int -> Int as
 .
 
 def main -> Int as
-    20 -> let i,
-    'fib i
+    if 20 -> let i, i > 0 then
+        'fib i
+    else
+        0
+    .
 .
