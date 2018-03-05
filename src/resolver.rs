@@ -49,7 +49,7 @@ pub fn resolve_decls(store: &mut Store) -> Result {
         let refs = &store;
         for func in &mut func_defs {
             for param in &mut func.params {
-                resolve_binding(param, refs)?;
+                resolve_type(&mut param.tp, refs)?;
             }
             resolve_type(&mut func.ret, refs)?;
         }
@@ -67,10 +67,6 @@ pub fn resolve_defs(store: &mut Store) -> Result {
     }
     store.func_defs = func_defs;
     Ok(())
-}
-
-fn resolve_binding(bind: &mut Binding, refs: &RefTable) -> Result {
-    resolve_type(&mut bind.tp, refs)
 }
 
 fn resolve_type(tp: &mut Type, refs: &RefTable) -> Result {
@@ -138,8 +134,8 @@ impl<'a> Resolver<'a> {
             } => {
                 self.resolve_expr(value, syms)?;
 
-                let idx = self.locals
-                    .push(Binding::new(var.clone(), value.tp.clone()));
+                let bind = Binding::new(var.clone(), value.tp.clone());
+                let idx = self.locals.push(bind);
                 syms.add(var.clone(), idx);
 
                 expr.tp = Type::new(TypeKind::Void);

@@ -1,7 +1,7 @@
 use std::fmt;
-use std::usize;
-use std::slice;
 use std::ops;
+use std::slice;
+use std::usize;
 
 use common::*;
 
