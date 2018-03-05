@@ -2,19 +2,22 @@ use std::fmt;
 use std::io;
 use std::result;
 
-use store;
+use store::Store;
+
 use lexer;
 use parser;
 use resolver;
+use type_checker;
 
 pub struct Compiler {
-    store: store::Store,
+    store: Store,
 }
 
 pub enum Error {
     Lexer(lexer::Error),
     Parser(parser::Error),
     Resolver(resolver::Error),
+    TypeChecker(type_checker::Error),
     IO(io::Error),
 }
 
@@ -38,6 +41,12 @@ impl From<resolver::Error> for Error {
     }
 }
 
+impl From<type_checker::Error> for Error {
+    fn from(err: type_checker::Error) -> Error {
+        Error::TypeChecker(err)
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IO(err)
@@ -50,6 +59,7 @@ impl fmt::Display for Error {
             Error::Lexer(ref err) => write!(f, "lexer error: {}", err),
             Error::Parser(ref err) => write!(f, "parser error: {}", err),
             Error::Resolver(ref err) => write!(f, "resolver error: {}", err),
+            Error::TypeChecker(ref err) => write!(f, "type checker error: {}", err),
             Error::IO(ref err) => write!(f, "io error: {}", err),
         }
     }
@@ -58,7 +68,7 @@ impl fmt::Display for Error {
 impl Compiler {
     pub fn new() -> Self {
         Self {
-            store: store::Store::new(),
+            store: Store::new(),
         }
     }
 
@@ -72,6 +82,7 @@ impl Compiler {
         self.store.define(source);
         resolver::resolve_decls(&mut self.store)?;
         resolver::resolve_defs(&mut self.store)?;
+        type_checker::type_check(&mut self.store)?;
 
         write!(output, "{:?}", self.store)?;
 

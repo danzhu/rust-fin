@@ -77,7 +77,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         while let Some(&TokenKind::Id(_)) = self.peek() {
             let name = expect_token!(self, TokenKind::Id(name), name);
             let tp = self.tp()?;
-            params.push(Binding::new(name, tp));
+            params.push(BindDef::new(name, tp));
         }
 
         let ret = if let Some(&TokenKind::Arrow) = self.peek() {
@@ -119,7 +119,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             let var = expect_token!(self, TokenKind::Id(name), name);
             Ok(Expr::new(ExprKind::Let {
                 value: Box::new(expr),
-                var,
+                var: Bind::new(Path::new(var)),
             }))
         } else {
             Ok(expr)
@@ -176,7 +176,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn factor(&mut self) -> Result<Expr> {
         match self.next() {
-            Some(TokenKind::Id(name)) => Ok(Expr::new(ExprKind::Id(Path::new(name)))),
+            Some(TokenKind::Id(name)) => Ok(Expr::new(ExprKind::Id(Bind::new(Path::new(name))))),
             Some(TokenKind::Int(val)) => Ok(Expr::new(ExprKind::Int(val))),
             Some(TokenKind::If) => {
                 let cond = self.cond()?;

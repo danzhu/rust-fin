@@ -7,6 +7,7 @@ mod compiler;
 mod lexer;
 mod parser;
 mod resolver;
+mod type_checker;
 
 use std::io;
 use std::process;

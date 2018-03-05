@@ -6,9 +6,8 @@ use ast::*;
 use store::*;
 
 struct Resolver<'a> {
-    store: &'a Store,
     refs: &'a RefTable,
-    locals: List<Binding>,
+    locals: List<BindDef>,
 }
 
 type RefTable = Store;
@@ -26,8 +25,6 @@ enum SymTableParent<'a> {
 pub enum Error {
     SymbolNotFound(&'static str, Path),
     WrongSymbolKind(&'static str, Symbol),
-    ArgCount { expect: usize, got: usize },
-    TypeMismatch { expect: Type, got: Type },
 }
 
 pub type Result = result::Result<(), Error>;
@@ -61,7 +58,7 @@ pub fn resolve_decls(store: &mut Store) -> Result {
 pub fn resolve_defs(store: &mut Store) -> Result {
     let mut func_defs = store.func_defs.clone();
     for func in &mut func_defs {
-        let mut res = Resolver::new(store, store);
+        let mut res = Resolver::new(store);
         res.resolve(func)?;
         func.locals = res.locals;
     }
@@ -84,21 +81,9 @@ fn resolve_func(func: &mut Func, refs: &RefTable) -> Result {
     Ok(())
 }
 
-fn expect_tp(expect: &Type, got: &Type) -> Result {
-    if expect == got {
-        Ok(())
-    } else {
-        Err(Error::TypeMismatch {
-            expect: expect.clone(),
-            got: got.clone(),
-        })
-    }
-}
-
 impl<'a> Resolver<'a> {
-    fn new(store: &'a Store, refs: &'a RefTable) -> Self {
+    fn new(refs: &'a RefTable) -> Self {
         Self {
-            store,
             refs,
             locals: List::new(),
         }
@@ -111,56 +96,35 @@ impl<'a> Resolver<'a> {
             syms.add(param.name.clone(), idx);
         }
 
-        self.resolve_expr(&mut func.body, &mut syms)?;
-
-        expect_tp(&func.ret, &func.body.tp)
+        self.resolve_expr(&mut func.body, &mut syms)
     }
 
     fn resolve_expr(&mut self, expr: &mut Expr, syms: &mut SymTable) -> Result {
         match expr.kind {
-            ExprKind::Block { ref mut stmts } => {
-                for stmt in stmts.iter_mut() {
-                    self.resolve_expr(stmt, syms)?;
-                }
-
-                expr.tp = match stmts.last() {
-                    Some(stmt) => stmt.tp.clone(),
-                    None => Type::new(TypeKind::Void),
-                };
-            }
+            ExprKind::Block { ref mut stmts } => for stmt in stmts.iter_mut() {
+                self.resolve_expr(stmt, syms)?;
+            },
             ExprKind::Let {
                 ref mut value,
-                ref var,
+                ref mut var,
             } => {
                 self.resolve_expr(value, syms)?;
 
-                let bind = Binding::new(var.clone(), value.tp.clone());
+                let name = &var.path.name;
+                let bind = BindDef::new(name.clone(), Type::new(TypeKind::Unknown));
                 let idx = self.locals.push(bind);
-                syms.add(var.clone(), idx);
-
-                expr.tp = Type::new(TypeKind::Void);
+                syms.add(name.clone(), idx);
+                var.path.index = idx;
             }
             ExprKind::Function {
                 ref mut func,
                 ref mut args,
             } => {
                 resolve_func(func, self.refs)?;
-                let def = &self.store.func_defs[func.path.index];
 
-                if def.params.len() != args.len() {
-                    return Err(Error::ArgCount {
-                        expect: def.params.len(),
-                        got: args.len(),
-                    });
-                }
-
-                for (param, arg) in def.params.iter().zip(args) {
+                for arg in args {
                     self.resolve_expr(arg, syms)?;
-
-                    expect_tp(&param.tp, &arg.tp)?;
                 }
-
-                expr.tp = def.ret.clone();
             }
             ExprKind::Binary {
                 ref mut left,
@@ -169,9 +133,6 @@ impl<'a> Resolver<'a> {
             } => {
                 self.resolve_expr(left, syms)?;
                 self.resolve_expr(right, syms)?;
-
-                expect_tp(&left.tp, &right.tp)?;
-                expr.tp = left.tp.clone();
             }
             ExprKind::If {
                 ref mut cond,
@@ -185,23 +146,12 @@ impl<'a> Resolver<'a> {
 
                 let mut fail_syms = SymTable::new(syms);
                 self.resolve_expr(fail, &mut fail_syms)?;
-
-                expect_tp(&self.store.type_int, &cond.tp)?;
-                expect_tp(&succ.tp, &fail.tp)?;
-                expr.tp = succ.tp.clone();
             }
-            ExprKind::Id(ref mut path) => {
-                path.index = syms.get(&path.name)
-                    .ok_or_else(|| Error::SymbolNotFound("Id", path.clone()))?;
-
-                expr.tp = self.locals[path.index].tp.clone();
+            ExprKind::Id(ref mut bind) => {
+                bind.path.index = syms.get(&bind.path.name)
+                    .ok_or_else(|| Error::SymbolNotFound("Id", bind.path.clone()))?;
             }
-            ExprKind::Int(_) => {
-                expr.tp = self.refs.type_int.clone();
-            }
-            ExprKind::Noop => {
-                expr.tp = Type::new(TypeKind::Void);
-            }
+            ExprKind::Int(_) | ExprKind::Noop => {}
         }
         Ok(())
     }
@@ -242,13 +192,6 @@ impl fmt::Display for Error {
                 write!(f, "{} symbol not found: '{}'", exp, path)
             }
             Error::WrongSymbolKind(exp, got) => write!(f, "expect {} symbol, got {:?}", exp, got),
-            Error::ArgCount { expect, got } => {
-                write!(f, "expect {} arguments, got {}", expect, got)
-            }
-            Error::TypeMismatch {
-                ref expect,
-                ref got,
-            } => write!(f, "expect type {:?}, got {:?}", expect, got),
         }
     }
 }

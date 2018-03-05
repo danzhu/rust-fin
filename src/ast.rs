@@ -36,10 +36,16 @@ pub enum TypeDefKind {
 #[derive(Clone)]
 pub struct FuncDef {
     pub name: String,
-    pub params: Vec<Binding>,
+    pub params: Vec<BindDef>,
     pub ret: Type,
     pub body: Expr,
-    pub locals: List<Binding>,
+    pub locals: List<BindDef>,
+}
+
+#[derive(Clone)]
+pub struct BindDef {
+    pub name: String,
+    pub tp: Type,
 }
 
 #[derive(Clone)]
@@ -55,7 +61,7 @@ pub enum ExprKind {
     },
     Let {
         value: Box<Expr>,
-        var: String,
+        var: Bind,
     },
     Function {
         func: Func,
@@ -72,7 +78,7 @@ pub enum ExprKind {
         fail: Box<Expr>,
     },
     Int(i32),
-    Id(Path),
+    Id(Bind),
     Noop,
 }
 
@@ -93,16 +99,15 @@ pub struct Func {
     pub path: Path,
 }
 
+#[derive(Clone)]
+pub struct Bind {
+    pub path: Path,
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct Path {
     pub name: String,
     pub index: Index,
-}
-
-#[derive(Clone)]
-pub struct Binding {
-    pub name: String,
-    pub tp: Type,
 }
 
 #[derive(Clone)]
@@ -164,7 +169,7 @@ impl fmt::Debug for TypeDef {
 }
 
 impl FuncDef {
-    pub fn new<Str>(name: Str, params: Vec<Binding>, ret: Type, body: Expr) -> Self
+    pub fn new<Str>(name: Str, params: Vec<BindDef>, ret: Type, body: Expr) -> Self
     where
         Str: Into<String>,
     {
@@ -191,6 +196,18 @@ impl fmt::Debug for FuncDef {
             writeln!(f, "{}{:?}", INDENT, local)?;
         }
         write!(f, "{:?}", self.body)
+    }
+}
+
+impl BindDef {
+    pub fn new(name: String, tp: Type) -> Self {
+        Self { name, tp }
+    }
+}
+
+impl fmt::Debug for BindDef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {:?}", self.name, self.tp)
     }
 }
 
@@ -245,7 +262,7 @@ impl Expr {
                 write!(f, "Block")?;
             }
             ExprKind::Let { ref var, .. } => {
-                write!(f, "Let {}", var)?;
+                write!(f, "Let {:?}", var)?;
             }
             ExprKind::Function { ref func, .. } => {
                 write!(f, "Function {:?}", func)?;
@@ -260,7 +277,7 @@ impl Expr {
                 write!(f, "Int {}", i)?;
             }
             ExprKind::Id(ref id) => {
-                write!(f, "Id {}", id)?;
+                write!(f, "Id {:?}", id)?;
             }
             ExprKind::Noop => {
                 write!(f, "Noop")?;
@@ -316,6 +333,18 @@ impl fmt::Debug for Func {
     }
 }
 
+impl Bind {
+    pub fn new(path: Path) -> Self {
+        Self { path }
+    }
+}
+
+impl fmt::Debug for Bind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.path)
+    }
+}
+
 impl Path {
     pub fn new<Str>(name: Str) -> Self
     where
@@ -338,18 +367,6 @@ impl fmt::Display for Path {
     }
 }
 
-impl Binding {
-    pub fn new(name: String, tp: Type) -> Self {
-        Self { name, tp }
-    }
-}
-
-impl fmt::Debug for Binding {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {:?}", self.name, self.tp)
-    }
-}
-
 impl<T> List<T> {
     pub fn new() -> Self {
         Self { items: Vec::new() }
@@ -367,6 +384,12 @@ impl<T> ops::Index<Index> for List<T> {
 
     fn index(&self, idx: Index) -> &Self::Output {
         &self.items[idx.0]
+    }
+}
+
+impl<T> ops::IndexMut<Index> for List<T> {
+    fn index_mut(&mut self, idx: Index) -> &mut Self::Output {
+        &mut self.items[idx.0]
     }
 }
 
