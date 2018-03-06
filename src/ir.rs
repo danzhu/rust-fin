@@ -61,6 +61,10 @@ impl Ir {
     pub fn push_block(&mut self) -> Index {
         self.blocks.push(Block::new())
     }
+
+    pub fn get(&self, reg: Reg) -> &Stmt {
+        &self.blocks[reg.block].stmts[reg.instr]
+    }
 }
 
 impl fmt::Debug for Ir {

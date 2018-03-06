@@ -56,7 +56,10 @@ impl<'a> Checker<'a> {
                     None => Type::new(TypeKind::Void),
                 };
             }
-            ExprKind::Let { ref mut value, ref var } => {
+            ExprKind::Let {
+                ref mut value,
+                ref var,
+            } => {
                 self.check(value)?;
 
                 let def = &mut self.locals[var.path.index];

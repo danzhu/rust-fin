@@ -87,6 +87,10 @@ impl<T> List<T> {
         Self { items: Vec::new() }
     }
 
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
     pub fn push(&mut self, item: T) -> Index {
         let idx = Index(self.items.len());
         self.items.push(item);
@@ -139,6 +143,10 @@ impl Index {
 
     pub fn new(idx: usize) -> Self {
         Index(idx)
+    }
+
+    pub fn value(&self) -> usize {
+        self.0
     }
 }
 

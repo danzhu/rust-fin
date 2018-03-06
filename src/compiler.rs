@@ -6,9 +6,10 @@ use def::Store;
 
 use lexer;
 use parser;
-use resolver;
-use type_checker;
-use ir_generator;
+use name_res;
+use type_chk;
+use ir_gen;
+use code_gen;
 
 pub struct Compiler {
     store: Store,
@@ -17,10 +18,11 @@ pub struct Compiler {
 pub enum Error {
     Lexer(lexer::Error),
     Parser(parser::Error),
-    Resolver(resolver::Error),
-    TypeChecker(type_checker::Error),
-    IrGenerator(ir_generator::Error),
-    IO(io::Error),
+    Resolver(name_res::Error),
+    TypeChecker(type_chk::Error),
+    IrGenerator(ir_gen::Error),
+    CodeGen(code_gen::Error),
+    Io(io::Error),
 }
 
 type Result = result::Result<(), Error>;
@@ -37,39 +39,46 @@ impl From<parser::Error> for Error {
     }
 }
 
-impl From<resolver::Error> for Error {
-    fn from(err: resolver::Error) -> Error {
+impl From<name_res::Error> for Error {
+    fn from(err: name_res::Error) -> Error {
         Error::Resolver(err)
     }
 }
 
-impl From<type_checker::Error> for Error {
-    fn from(err: type_checker::Error) -> Error {
+impl From<type_chk::Error> for Error {
+    fn from(err: type_chk::Error) -> Error {
         Error::TypeChecker(err)
     }
 }
 
-impl From<ir_generator::Error> for Error {
-    fn from(err: ir_generator::Error) -> Error {
+impl From<ir_gen::Error> for Error {
+    fn from(err: ir_gen::Error) -> Error {
         Error::IrGenerator(err)
+    }
+}
+
+impl From<code_gen::Error> for Error {
+    fn from(err: code_gen::Error) -> Error {
+        Error::CodeGen(err)
     }
 }
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
-        Error::IO(err)
+        Error::Io(err)
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Lexer(ref err) => write!(f, "lexer error: {}", err),
-            Error::Parser(ref err) => write!(f, "parser error: {}", err),
-            Error::Resolver(ref err) => write!(f, "resolver error: {}", err),
-            Error::TypeChecker(ref err) => write!(f, "type checker error: {}", err),
-            Error::IrGenerator(ref err) => write!(f, "ir generator error: {}", err),
-            Error::IO(ref err) => write!(f, "io error: {}", err),
+            Error::Lexer(ref err) => write!(f, "lexing error: {}", err),
+            Error::Parser(ref err) => write!(f, "parsing error: {}", err),
+            Error::Resolver(ref err) => write!(f, "name resolution error: {}", err),
+            Error::TypeChecker(ref err) => write!(f, "type check error: {}", err),
+            Error::IrGenerator(ref err) => write!(f, "ir generation error: {}", err),
+            Error::CodeGen(ref err) => write!(f, "code generation error: {}", err),
+            Error::Io(ref err) => write!(f, "io error: {}", err),
         }
     }
 }
@@ -81,7 +90,7 @@ impl Compiler {
         }
     }
 
-    pub fn compile<In, Out>(&mut self, input: In, mut output: Out) -> Result
+    pub fn compile<In, Out>(&mut self, input: In, output: Out) -> Result
     where
         In: io::Read,
         Out: io::Write,
@@ -89,12 +98,11 @@ impl Compiler {
         let tokens = lexer::lex(input)?;
         let source = parser::parse(tokens.into_iter())?;
         self.store.define(source);
-        resolver::resolve_decls(&mut self.store)?;
-        resolver::resolve_defs(&mut self.store)?;
-        type_checker::type_check(&mut self.store)?;
-        ir_generator::generate(&mut self.store)?;
-
-        write!(output, "{:?}", self.store)?;
+        name_res::resolve_decls(&mut self.store)?;
+        name_res::resolve_defs(&mut self.store)?;
+        type_chk::type_check(&mut self.store)?;
+        ir_gen::generate(&mut self.store)?;
+        code_gen::generate(&self.store, output)?;
 
         Ok(())
     }

@@ -6,9 +6,10 @@ mod def;
 
 mod lexer;
 mod parser;
-mod resolver;
-mod type_checker;
-mod ir_generator;
+mod name_res;
+mod type_chk;
+mod ir_gen;
+mod code_gen;
 mod compiler;
 
 use std::io;
