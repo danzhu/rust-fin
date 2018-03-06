@@ -2,8 +2,9 @@ use std::fmt;
 use std::result;
 use std::collections::HashMap;
 
+use common::*;
 use ast::*;
-use store::*;
+use def::*;
 
 struct Resolver<'a> {
     refs: &'a RefTable,
@@ -111,7 +112,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(value, syms)?;
 
                 let name = &var.path.name;
-                let bind = BindDef::new(name.clone(), Type::new(TypeKind::Unknown));
+                let bind = BindDef::new(name.clone());
                 let idx = self.locals.push(bind);
                 syms.add(name.clone(), idx);
                 var.path.index = idx;

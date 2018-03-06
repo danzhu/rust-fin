@@ -2,12 +2,13 @@ use std::fmt;
 use std::io;
 use std::result;
 
-use store::Store;
+use def::Store;
 
 use lexer;
 use parser;
 use resolver;
 use type_checker;
+use ir_generator;
 
 pub struct Compiler {
     store: Store,
@@ -18,6 +19,7 @@ pub enum Error {
     Parser(parser::Error),
     Resolver(resolver::Error),
     TypeChecker(type_checker::Error),
+    IrGenerator(ir_generator::Error),
     IO(io::Error),
 }
 
@@ -47,6 +49,12 @@ impl From<type_checker::Error> for Error {
     }
 }
 
+impl From<ir_generator::Error> for Error {
+    fn from(err: ir_generator::Error) -> Error {
+        Error::IrGenerator(err)
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IO(err)
@@ -60,6 +68,7 @@ impl fmt::Display for Error {
             Error::Parser(ref err) => write!(f, "parser error: {}", err),
             Error::Resolver(ref err) => write!(f, "resolver error: {}", err),
             Error::TypeChecker(ref err) => write!(f, "type checker error: {}", err),
+            Error::IrGenerator(ref err) => write!(f, "ir generator error: {}", err),
             Error::IO(ref err) => write!(f, "io error: {}", err),
         }
     }
@@ -83,6 +92,7 @@ impl Compiler {
         resolver::resolve_decls(&mut self.store)?;
         resolver::resolve_defs(&mut self.store)?;
         type_checker::type_check(&mut self.store)?;
+        ir_generator::generate(&mut self.store)?;
 
         write!(output, "{:?}", self.store)?;
 

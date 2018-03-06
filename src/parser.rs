@@ -2,8 +2,10 @@ use std::fmt;
 use std::iter;
 use std::result;
 
+use common::*;
 use token::*;
 use ast::*;
+use def::*;
 
 struct Parser<T: Iterator<Item = Token>> {
     source: iter::Peekable<T>,
@@ -76,8 +78,9 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let mut params = Vec::new();
         while let Some(&TokenKind::Id(_)) = self.peek() {
             let name = expect_token!(self, TokenKind::Id(name), name);
-            let tp = self.tp()?;
-            params.push(BindDef::new(name, tp));
+            let mut bind = BindDef::new(name);
+            bind.tp = self.tp()?;
+            params.push(bind);
         }
 
         let ret = if let Some(&TokenKind::Arrow) = self.peek() {

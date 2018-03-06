@@ -1,13 +1,15 @@
 mod common;
 mod token;
 mod ast;
-mod store;
+mod ir;
+mod def;
 
-mod compiler;
 mod lexer;
 mod parser;
 mod resolver;
 mod type_checker;
+mod ir_generator;
+mod compiler;
 
 use std::io;
 use std::process;

@@ -1,8 +1,9 @@
 use std::fmt;
 use std::result;
 
+use common::*;
 use ast::*;
-use store::*;
+use def::*;
 
 struct Checker<'a> {
     store: &'a Store,
