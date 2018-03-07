@@ -42,9 +42,18 @@ macro_rules! expect_sym {
 }
 
 pub fn resolve_decls(store: &mut Store) -> Result {
+    let mut type_defs = store.type_defs.clone();
     let mut func_defs = store.func_defs.clone();
     {
         let refs = &store;
+        for tp in &mut type_defs {
+            match tp.kind {
+                TypeDefKind::Struct { ref mut fields } => for field in fields {
+                    resolve_type(&mut field.tp, refs)?;
+                },
+                TypeDefKind::Int | TypeDefKind::Bool => {}
+            }
+        }
         for func in &mut func_defs {
             for param in &mut func.params {
                 resolve_type(&mut param.tp, refs)?;
@@ -52,6 +61,7 @@ pub fn resolve_decls(store: &mut Store) -> Result {
             resolve_type(&mut func.ret, refs)?;
         }
     }
+    store.type_defs = type_defs;
     store.func_defs = func_defs;
     Ok(())
 }

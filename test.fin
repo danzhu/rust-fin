@@ -1,3 +1,8 @@
+struct Vec
+    x Int
+    y Int
+.
+
 def fib n Int -> Int as
     if n = 0 then
         0

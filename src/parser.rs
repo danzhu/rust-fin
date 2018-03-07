@@ -65,6 +65,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
     fn def(&mut self) -> Result<Def> {
         let kind = match self.next() {
+            Some(TokenKind::Struct) => DefKind::Type(self.structure()?),
             Some(TokenKind::Def) => DefKind::Func(self.func()?),
             got => return Err(Error::Expect("top-level definition", got)),
         };
@@ -75,13 +76,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn func(&mut self) -> Result<FuncDef> {
         let name = expect_token!(self, TokenKind::Id(name), name);
 
-        let mut params = Vec::new();
-        while let Some(&TokenKind::Id(_)) = self.peek() {
-            let name = expect_token!(self, TokenKind::Id(name), name);
-            let mut bind = BindDef::new(name);
-            bind.tp = self.tp()?;
-            params.push(bind);
-        }
+        let params = self.bind_list()?;
 
         let ret = if let Some(&TokenKind::Arrow) = self.peek() {
             self.next();
@@ -97,6 +92,31 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         expect_token!(self, TokenKind::Period);
 
         Ok(FuncDef::new(name, params, ret, body))
+    }
+
+    fn structure(&mut self) -> Result<TypeDef> {
+        let name = expect_token!(self, TokenKind::Id(name), name);
+
+        let fields = self.bind_list()?;
+
+        expect_token!(self, TokenKind::Period);
+
+        Ok(TypeDef::new(name, TypeDefKind::Struct { fields }))
+    }
+
+    fn bind_list(&mut self) -> Result<Vec<BindDef>> {
+        let mut binds = Vec::new();
+        while let Some(&TokenKind::Id(_)) = self.peek() {
+            binds.push(self.bind()?);
+        }
+        Ok(binds)
+    }
+
+    fn bind(&mut self) -> Result<BindDef> {
+        let name = expect_token!(self, TokenKind::Id(name), name);
+        let mut bind = BindDef::new(name);
+        bind.tp = self.tp()?;
+        Ok(bind)
     }
 
     fn block(&mut self) -> Result<Expr> {

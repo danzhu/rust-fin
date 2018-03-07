@@ -106,6 +106,7 @@ where
 
             match id.as_ref() {
                 "def" => TokenKind::Def,
+                "struct" => TokenKind::Struct,
                 "as" => TokenKind::As,
                 "if" => TokenKind::If,
                 "then" => TokenKind::Then,

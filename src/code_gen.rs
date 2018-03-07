@@ -29,10 +29,12 @@ struct Label {
 
 #[derive(Clone)]
 enum Value {
+    Type(String),
     Func(String),
     Param(String),
     Label(Label),
-    Local(usize),
+    Local(usize, usize),
+    Temp(usize),
     Int(i32),
 }
 
@@ -47,6 +49,15 @@ where
     Out: io::Write,
 {
     let mut first = true;
+    for tp in &store.type_defs {
+        if first {
+            first = false;
+        } else {
+            writeln!(&mut output)?;
+        }
+
+        gen_type(store, tp, &mut output)?;
+    }
     for func in &store.func_defs {
         if first {
             first = false;
@@ -66,6 +77,60 @@ where
     Ok(())
 }
 
+fn gen_type<Out>(store: &Store, tp: &TypeDef, output: &mut Out) -> Result<()>
+where
+    Out: io::Write,
+{
+    writeln!(output, "; Type {}", tp.name)?;
+    match tp.kind {
+        TypeDefKind::Struct { ref fields } => {
+            let name = typedef_name(tp);
+
+            write!(output, "{} = type {{ ", name)?;
+
+            let mut first = true;
+            for field in fields {
+                if first {
+                    first = false;
+                } else {
+                    write!(output, ", ")?;
+                }
+
+                write!(output, "{}", type_name(store, &field.tp))?;
+            }
+
+            writeln!(output, " }}")?;
+        }
+        TypeDefKind::Int | TypeDefKind::Bool => {}
+    }
+    Ok(())
+}
+
+fn type_name(store: &Store, tp: &Type) -> String {
+    if *tp == store.type_int {
+        "i32".to_string()
+    } else if *tp == store.type_bool {
+        "i1".to_string()
+    } else {
+        match tp.kind {
+            TypeKind::Named { ref path } => {
+                let def = &store.type_defs[path.index];
+                typedef_name(def).to_string()
+            }
+            TypeKind::Void => "void".to_string(),
+            TypeKind::Unknown => panic!("unresolved type"),
+        }
+    }
+}
+
+fn typedef_name(tp: &TypeDef) -> Value {
+    Value::Type(tp.name.clone())
+}
+
+fn funcdef_name(func: &FuncDef) -> Value {
+    Value::Func(func.name.clone())
+}
+
 impl<'a, Out> Gen<'a, Out>
 where
     Out: io::Write,
@@ -77,15 +142,26 @@ where
             let values = block
                 .stmts
                 .iter()
-                .map(|stmt| self.alloc_stmt(stmt))
+                .enumerate()
+                .map(|(j, stmt)| match stmt.kind {
+                    StmtKind::Phi { .. } | StmtKind::Binary { .. } | StmtKind::Call { .. } => {
+                        Value::Local(i, j)
+                    }
+                    StmtKind::Param(param) => {
+                        let param = &self.func.params[param.value()];
+                        self.param(param)
+                    }
+                    StmtKind::Int(val) => Value::Int(val),
+                })
                 .collect();
             self.blocks.push(Blk { label, values });
         }
 
         // generate code
-        let name = self.func(self.func);
-        let ret = self.tp(&self.func.ret);
+        let name = funcdef_name(self.func);
+        let ret = type_name(self.store, &self.func.ret);
 
+        writeln!(self.output, "; Func {}", self.func.name)?;
         write!(self.output, "define {} {}(", ret, name)?;
         let mut first = true;
         for param in &self.func.params {
@@ -95,7 +171,7 @@ where
                 write!(self.output, ", ")?;
             }
 
-            let tp = self.tp(&param.tp);
+            let tp = type_name(self.store, &param.tp);
             let param = self.param(param);
             write!(self.output, "{} {}", tp, param)?;
         }
@@ -116,17 +192,6 @@ where
         Ok(())
     }
 
-    fn alloc_stmt(&mut self, stmt: &Stmt) -> Value {
-        match stmt.kind {
-            StmtKind::Phi { .. } | StmtKind::Binary { .. } | StmtKind::Call { .. } => self.temp(),
-            StmtKind::Param(param) => {
-                let param = &self.func.params[param.value()];
-                self.param(param)
-            }
-            StmtKind::Int(val) => Value::Int(val),
-        }
-    }
-
     fn gen_block(&mut self, block: &Block, idx: usize) -> Result<()> {
         // TODO: avoid this copy
         let values = self.blocks[idx].values.clone();
@@ -143,7 +208,7 @@ where
     fn gen_stmt(&mut self, stmt: &Stmt, val: &Value) -> Result<()> {
         match stmt.kind {
             StmtKind::Phi { ref values } => {
-                let tp = self.tp(&stmt.tp);
+                let tp = type_name(self.store, &stmt.tp);
 
                 write!(self.output, "{}{} = phi {} ", INDENT, val, tp)?;
 
@@ -164,7 +229,7 @@ where
                 writeln!(self.output)?;
             }
             StmtKind::Binary { op, left, right } => {
-                let tp = self.tp(&self.func.ir.get(left).tp);
+                let tp = type_name(self.store, &self.func.ir.get(left).tp);
 
                 let op = match op {
                     Op::Arith(op) => match op {
@@ -194,10 +259,10 @@ where
                 )?;
             }
             StmtKind::Call { ref func, ref args } => {
-                let tp = self.tp(&stmt.tp);
+                let tp = type_name(self.store, &stmt.tp);
 
                 let func = &self.store.func_defs[func.path.index];
-                let name = self.func(func);
+                let name = funcdef_name(func);
 
                 write!(self.output, "{}{} = call {} {}(", INDENT, val, tp, name)?;
 
@@ -209,7 +274,7 @@ where
                         write!(self.output, ", ")?;
                     }
 
-                    let tp = self.tp(&self.func.ir.get(arg).tp);
+                    let tp = type_name(self.store, &self.func.ir.get(arg).tp);
                     let arg = self.reg(arg);
 
                     write!(self.output, "{} {}", tp, arg)?;
@@ -226,7 +291,7 @@ where
     fn gen_term(&mut self, term: &Term) -> Result<()> {
         match *term {
             Term::Br { cond, succ, fail } => {
-                let tp = self.tp(&self.func.ir.get(cond).tp);
+                let tp = type_name(self.store, &self.func.ir.get(cond).tp);
                 let cond = self.reg(cond);
                 let succ = self.label(succ);
                 let fail = self.label(fail);
@@ -243,7 +308,7 @@ where
                 writeln!(self.output, "{}br label {}", INDENT, tar)?;
             }
             Term::Ret(reg) => {
-                let tp = self.tp(&self.func.ir.get(reg).tp);
+                let tp = type_name(self.store, &self.func.ir.get(reg).tp);
                 let reg = self.reg(reg);
 
                 writeln!(self.output, "{}ret {} {}", INDENT, tp, reg)?;
@@ -256,7 +321,7 @@ where
     }
 
     fn temp(&mut self) -> Value {
-        let res = Value::Local(self.temp);
+        let res = Value::Temp(self.temp);
         self.temp += 1;
         res
     }
@@ -272,24 +337,6 @@ where
     fn param(&self, param: &BindDef) -> Value {
         Value::Param(param.name.clone())
     }
-
-    fn func(&self, func: &FuncDef) -> Value {
-        Value::Func(func.name.clone())
-    }
-
-    fn tp(&mut self, tp: &Type) -> String {
-        if *tp == self.store.type_int {
-            "i32".to_string()
-        } else if *tp == self.store.type_bool {
-            "i1".to_string()
-        } else {
-            match tp.kind {
-                TypeKind::Named { path: ref _path } => unimplemented!(),
-                TypeKind::Void => "void".to_string(),
-                TypeKind::Unknown => panic!("unresolved type"),
-            }
-        }
-    }
 }
 
 impl fmt::Display for Label {
@@ -301,10 +348,12 @@ impl fmt::Display for Label {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            Value::Type(ref name) => write!(f, "%{}", name),
             Value::Func(ref name) => write!(f, "@{}", name),
             Value::Param(ref name) => write!(f, "%p_{}", name),
             Value::Label(ref lab) => write!(f, "%{}", lab),
-            Value::Local(idx) => write!(f, "%l_{}", idx),
+            Value::Local(blk, idx) => write!(f, "%l_{}_{}", blk, idx),
+            Value::Temp(idx) => write!(f, "%t_{}", idx),
             Value::Int(val) => write!(f, "{}", val),
         }
     }

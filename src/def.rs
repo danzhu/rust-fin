@@ -17,6 +17,7 @@ pub struct Def {
 
 #[derive(Clone)]
 pub enum DefKind {
+    Type(TypeDef),
     Func(FuncDef),
 }
 
@@ -39,6 +40,7 @@ pub struct TypeDef {
 
 #[derive(Clone)]
 pub enum TypeDefKind {
+    Struct { fields: Vec<BindDef> },
     Int,
     Bool,
 }
@@ -100,6 +102,7 @@ impl Def {
 impl fmt::Debug for Def {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.kind {
+            DefKind::Type(ref tp) => writeln!(f, "{:?}", tp),
             DefKind::Func(ref func) => writeln!(f, "{:?}", func),
         }
     }
@@ -131,6 +134,9 @@ impl Store {
     pub fn define(&mut self, src: Source) {
         for def in src.defs {
             match def.kind {
+                DefKind::Type(tp) => {
+                    self.define_type(tp);
+                }
                 DefKind::Func(func) => {
                     self.define_func(func);
                 }
@@ -188,8 +194,15 @@ impl TypeDef {
 
 impl fmt::Debug for TypeDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Type ")?;
+        writeln!(f, "Type {}", self.name)?;
         match self.kind {
+            TypeDefKind::Struct { ref fields } => {
+                writeln!(f, "Struct")?;
+                for field in fields {
+                    writeln!(f, "{}{:?}", INDENT, field)?;
+                }
+                Ok(())
+            }
             TypeDefKind::Int => writeln!(f, "Int"),
             TypeDefKind::Bool => writeln!(f, "Bool"),
         }

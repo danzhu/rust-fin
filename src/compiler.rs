@@ -102,6 +102,9 @@ impl Compiler {
         name_res::resolve_defs(&mut self.store)?;
         type_chk::type_check(&mut self.store)?;
         ir_gen::generate(&mut self.store)?;
+
+        eprint!("{:?}", self.store);
+
         code_gen::generate(&self.store, output)?;
 
         Ok(())
