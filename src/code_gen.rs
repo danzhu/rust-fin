@@ -18,11 +18,23 @@ where
 }
 
 struct Blk {
-    label: Value,
-    instrs: Vec<Value>,
+    label: Label,
+    values: Vec<Value>,
 }
 
-type Value = String;
+#[derive(Clone)]
+struct Label {
+    index: usize,
+}
+
+#[derive(Clone)]
+enum Value {
+    Func(String),
+    Param(String),
+    Label(Label),
+    Local(usize),
+    Int(i32),
+}
 
 pub enum Error {
     Io(io::Error),
@@ -61,19 +73,20 @@ where
     fn gen(&mut self) -> Result<()> {
         // allocate temporaries
         for (i, block) in self.func.ir.blocks.iter().enumerate() {
-            let label = format!("b_{}", i);
-            let instrs = block
+            let label = Label { index: i };
+            let values = block
                 .stmts
                 .iter()
                 .map(|stmt| self.alloc_stmt(stmt))
                 .collect();
-            self.blocks.push(Blk { label, instrs });
+            self.blocks.push(Blk { label, values });
         }
 
         // generate code
+        let name = self.func(self.func);
         let ret = self.tp(&self.func.ret);
 
-        write!(self.output, "define {} @{}(", ret, self.func.name)?;
+        write!(self.output, "define {} {}(", ret, name)?;
         let mut first = true;
         for param in &self.func.params {
             if first {
@@ -105,24 +118,23 @@ where
 
     fn alloc_stmt(&mut self, stmt: &Stmt) -> Value {
         match stmt.kind {
-            StmtKind::Phi { .. } | StmtKind::Binary { .. } | StmtKind::Call { .. } => {
-                format!("%{}", self.temp())
-            }
+            StmtKind::Phi { .. } | StmtKind::Binary { .. } | StmtKind::Call { .. } => self.temp(),
             StmtKind::Param(param) => {
                 let param = &self.func.params[param.value()];
                 self.param(param)
             }
-            StmtKind::Int(val) => val.to_string(),
+            StmtKind::Int(val) => Value::Int(val),
         }
     }
 
     fn gen_block(&mut self, block: &Block, idx: usize) -> Result<()> {
-        let instrs = self.blocks[idx].instrs.clone();
+        // TODO: avoid this copy
+        let values = self.blocks[idx].values.clone();
 
         writeln!(self.output, "{}:", self.blocks[idx].label)?;
 
-        for (stmt, val) in block.stmts.iter().zip(instrs.into_iter()) {
-            self.gen_stmt(stmt, &val)?;
+        for (stmt, val) in block.stmts.iter().zip(&values) {
+            self.gen_stmt(stmt, val)?;
         }
         self.gen_term(&block.term)?;
         Ok(())
@@ -144,9 +156,9 @@ where
                     }
 
                     let val = self.reg(val);
-                    let lab = &self.blocks[lab.value()].label;
+                    let lab = self.label(lab);
 
-                    write!(self.output, "[ {}, %{} ]", val, lab)?;
+                    write!(self.output, "[ {}, {} ]", val, lab)?;
                 }
 
                 writeln!(self.output)?;
@@ -221,14 +233,14 @@ where
 
                 writeln!(
                     self.output,
-                    "{}br {} {}, label %{}, label %{}",
+                    "{}br {} {}, label {}, label {}",
                     INDENT, tp, cond, succ, fail
                 )?;
             }
             Term::Goto(tar) => {
                 let tar = self.label(tar);
 
-                writeln!(self.output, "{}br label %{}", INDENT, tar)?;
+                writeln!(self.output, "{}br label {}", INDENT, tar)?;
             }
             Term::Ret(reg) => {
                 let tp = self.tp(&self.func.ir.get(reg).tp);
@@ -244,28 +256,28 @@ where
     }
 
     fn temp(&mut self) -> Value {
-        let res = format!("t_{}", self.temp);
+        let res = Value::Local(self.temp);
         self.temp += 1;
         res
     }
 
     fn reg(&self, reg: Reg) -> Value {
-        self.blocks[reg.block.value()].instrs[reg.instr.value()].clone()
+        self.blocks[reg.block.value()].values[reg.stmt.value()].clone()
     }
 
     fn label(&self, idx: Index) -> Value {
-        self.blocks[idx.value()].label.clone()
+        Value::Label(self.blocks[idx.value()].label.clone())
     }
 
     fn param(&self, param: &BindDef) -> Value {
-        format!("%p_{}", param.name)
+        Value::Param(param.name.clone())
     }
 
     fn func(&self, func: &FuncDef) -> Value {
-        format!("@{}", func.name)
+        Value::Func(func.name.clone())
     }
 
-    fn tp(&mut self, tp: &Type) -> Value {
+    fn tp(&mut self, tp: &Type) -> String {
         if *tp == self.store.type_int {
             "i32".to_string()
         } else if *tp == self.store.type_bool {
@@ -276,6 +288,24 @@ where
                 TypeKind::Void => "void".to_string(),
                 TypeKind::Unknown => panic!("unresolved type"),
             }
+        }
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "b_{}", self.index)
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Value::Func(ref name) => write!(f, "@{}", name),
+            Value::Param(ref name) => write!(f, "%p_{}", name),
+            Value::Label(ref lab) => write!(f, "%{}", lab),
+            Value::Local(idx) => write!(f, "%l_{}", idx),
+            Value::Int(val) => write!(f, "{}", val),
         }
     }
 }

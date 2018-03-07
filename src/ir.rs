@@ -39,7 +39,7 @@ pub enum Term {
 #[derive(Copy, Clone)]
 pub struct Reg {
     pub block: Index,
-    pub instr: Index,
+    pub stmt: Index,
 }
 
 impl Ir {
@@ -50,8 +50,8 @@ impl Ir {
     }
 
     pub fn write(&mut self, block: Index, stmt: Stmt) -> Reg {
-        let instr = self.blocks[block].stmts.push(stmt);
-        Reg { block, instr }
+        let stmt = self.blocks[block].stmts.push(stmt);
+        Reg { block, stmt }
     }
 
     pub fn end(&mut self, block: Index, term: Term) {
@@ -63,7 +63,7 @@ impl Ir {
     }
 
     pub fn get(&self, reg: Reg) -> &Stmt {
-        &self.blocks[reg.block].stmts[reg.instr]
+        &self.blocks[reg.block].stmts[reg.stmt]
     }
 }
 
@@ -149,12 +149,12 @@ impl fmt::Debug for Term {
 impl Reg {
     pub const NONE: Reg = Reg {
         block: Index::UNKNOWN,
-        instr: Index::UNKNOWN,
+        stmt: Index::UNKNOWN,
     };
 }
 
 impl fmt::Debug for Reg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}:{:?}", self.block, self.instr)
+        write!(f, "{:?}:{:?}", self.block, self.stmt)
     }
 }
