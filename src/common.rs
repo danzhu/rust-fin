@@ -19,11 +19,21 @@ pub struct Span {
 
 #[derive(Copy, Clone)]
 pub enum Op {
+    Arith(ArithOp),
+    Comp(CompOp),
+}
+
+#[derive(Copy, Clone)]
+pub enum ArithOp {
     Add,
     Sub,
     Mul,
     Div,
     Mod,
+}
+
+#[derive(Copy, Clone)]
+pub enum CompOp {
     Eq,
     Ne,
     Lt,
@@ -69,15 +79,15 @@ pub struct Path {
 impl fmt::Debug for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Op::Add => write!(f, "Add"),
-            Op::Sub => write!(f, "Sub"),
-            Op::Mul => write!(f, "Mul"),
-            Op::Div => write!(f, "Div"),
-            Op::Mod => write!(f, "Mod"),
-            Op::Eq => write!(f, "Eq"),
-            Op::Ne => write!(f, "Ne"),
-            Op::Lt => write!(f, "Lt"),
-            Op::Gt => write!(f, "Gt"),
+            Op::Arith(ArithOp::Add) => write!(f, "Add"),
+            Op::Arith(ArithOp::Sub) => write!(f, "Sub"),
+            Op::Arith(ArithOp::Mul) => write!(f, "Mul"),
+            Op::Arith(ArithOp::Div) => write!(f, "Div"),
+            Op::Arith(ArithOp::Mod) => write!(f, "Mod"),
+            Op::Comp(CompOp::Eq) => write!(f, "Eq"),
+            Op::Comp(CompOp::Ne) => write!(f, "Ne"),
+            Op::Comp(CompOp::Lt) => write!(f, "Lt"),
+            Op::Comp(CompOp::Gt) => write!(f, "Gt"),
         }
     }
 }

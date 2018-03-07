@@ -128,21 +128,21 @@ where
                     self.read();
                     TokenKind::Arrow
                 } else {
-                    TokenKind::Operator(Op::Sub)
+                    TokenKind::Operator(Op::Arith(ArithOp::Sub))
                 },
                 '!' => if let Some(&'=') = self.source.peek() {
                     self.read();
-                    TokenKind::Operator(Op::Ne)
+                    TokenKind::Operator(Op::Comp(CompOp::Ne))
                 } else {
                     TokenKind::Not
                 },
-                '+' => TokenKind::Operator(Op::Add),
-                '*' => TokenKind::Operator(Op::Mul),
-                '/' => TokenKind::Operator(Op::Div),
-                '%' => TokenKind::Operator(Op::Mod),
-                '=' => TokenKind::Operator(Op::Eq),
-                '<' => TokenKind::Operator(Op::Lt),
-                '>' => TokenKind::Operator(Op::Gt),
+                '+' => TokenKind::Operator(Op::Arith(ArithOp::Add)),
+                '*' => TokenKind::Operator(Op::Arith(ArithOp::Mul)),
+                '/' => TokenKind::Operator(Op::Arith(ArithOp::Div)),
+                '%' => TokenKind::Operator(Op::Arith(ArithOp::Mod)),
+                '=' => TokenKind::Operator(Op::Comp(CompOp::Eq)),
+                '<' => TokenKind::Operator(Op::Comp(CompOp::Lt)),
+                '>' => TokenKind::Operator(Op::Comp(CompOp::Gt)),
                 ',' => TokenKind::Comma,
                 '.' => TokenKind::Period,
                 '(' => TokenKind::LParen,

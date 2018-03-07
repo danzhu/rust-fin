@@ -152,18 +152,24 @@ where
                 writeln!(self.output)?;
             }
             StmtKind::Binary { op, left, right } => {
-                let tp = self.tp(&stmt.tp);
+                let tp = self.tp(&self.func.ir.get(left).tp);
 
                 let op = match op {
-                    Op::Add => "add",
-                    Op::Sub => "sub",
-                    Op::Mul => "mul",
-                    Op::Div => "sdiv",
-                    Op::Mod => "srem",
-                    Op::Eq => "icmp eq",
-                    Op::Ne => "icmp ne",
-                    Op::Lt => "icmp slt",
-                    Op::Gt => "icmp sgt",
+                    Op::Arith(op) => match op {
+                        ArithOp::Add => "add",
+                        ArithOp::Sub => "sub",
+                        ArithOp::Mul => "mul",
+                        ArithOp::Div => "sdiv",
+                        ArithOp::Mod => "srem",
+                    }.to_string(),
+                    Op::Comp(op) => {
+                        "icmp ".to_string() + match op {
+                            CompOp::Eq => "eq",
+                            CompOp::Ne => "ne",
+                            CompOp::Lt => "slt",
+                            CompOp::Gt => "sgt",
+                        }
+                    }
                 };
 
                 let left = self.reg(left);
@@ -183,16 +189,15 @@ where
 
                 write!(self.output, "{}{} = call {} {}(", INDENT, val, tp, name)?;
 
-                // TODO: use arg type instead of param type
                 let mut first = true;
-                for (param, &arg) in func.params.iter().zip(args) {
+                for &arg in args {
                     if first {
                         first = false;
                     } else {
                         write!(self.output, ", ")?;
                     }
 
-                    let tp = self.tp(&param.tp);
+                    let tp = self.tp(&self.func.ir.get(arg).tp);
                     let arg = self.reg(arg);
 
                     write!(self.output, "{} {}", tp, arg)?;
@@ -209,15 +214,15 @@ where
     fn gen_term(&mut self, term: &Term) -> Result<()> {
         match *term {
             Term::Br { cond, succ, fail } => {
+                let tp = self.tp(&self.func.ir.get(cond).tp);
                 let cond = self.reg(cond);
                 let succ = self.label(succ);
                 let fail = self.label(fail);
 
-                // TODO: use proper type
                 writeln!(
                     self.output,
-                    "{}br i1 {}, label %{}, label %{}",
-                    INDENT, cond, succ, fail
+                    "{}br {} {}, label %{}, label %{}",
+                    INDENT, tp, cond, succ, fail
                 )?;
             }
             Term::Goto(tar) => {
@@ -263,6 +268,8 @@ where
     fn tp(&mut self, tp: &Type) -> Value {
         if *tp == self.store.type_int {
             "i32".to_string()
+        } else if *tp == self.store.type_bool {
+            "i1".to_string()
         } else {
             match tp.kind {
                 TypeKind::Named { path: ref _path } => unimplemented!(),

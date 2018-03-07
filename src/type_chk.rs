@@ -88,15 +88,18 @@ impl<'a> Checker<'a> {
                 expr.tp = def.ret.clone();
             }
             ExprKind::Binary {
+                op,
                 ref mut left,
                 ref mut right,
-                ..
             } => {
                 self.check(left)?;
                 self.check(right)?;
 
                 expect_tp(&left.tp, &right.tp)?;
-                expr.tp = left.tp.clone();
+                expr.tp = match op {
+                    Op::Arith(_) => left.tp.clone(),
+                    Op::Comp(_) => self.store.type_bool.clone(),
+                };
             }
             ExprKind::If {
                 ref mut cond,
@@ -107,7 +110,7 @@ impl<'a> Checker<'a> {
                 self.check(succ)?;
                 self.check(fail)?;
 
-                expect_tp(&self.store.type_int, &cond.tp)?;
+                expect_tp(&self.store.type_bool, &cond.tp)?;
                 expect_tp(&succ.tp, &fail.tp)?;
                 expr.tp = succ.tp.clone();
             }

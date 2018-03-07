@@ -22,7 +22,7 @@ fn run() -> i32 {
     let res = comp.compile(io::stdin(), io::stdout());
 
     if let Err(err) = res {
-        println!("{}", err);
+        eprintln!("{}", err);
         return 1;
     }
 

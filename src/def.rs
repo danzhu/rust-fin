@@ -27,6 +27,8 @@ pub struct Store {
 
     pub def_int: Index,
     pub type_int: Type,
+    pub def_bool: Index,
+    pub type_bool: Type,
 }
 
 #[derive(Clone)]
@@ -38,6 +40,7 @@ pub struct TypeDef {
 #[derive(Clone)]
 pub enum TypeDefKind {
     Int,
+    Bool,
 }
 
 #[derive(Clone)]
@@ -111,9 +114,12 @@ impl Store {
 
             def_int: Index::UNKNOWN,
             type_int: Type::new(TypeKind::Unknown),
+            def_bool: Index::UNKNOWN,
+            type_bool: Type::new(TypeKind::Unknown),
         };
 
         define_tp!(store, def_int, type_int, Int);
+        define_tp!(store, def_bool, type_bool, Bool);
 
         store
     }
@@ -185,6 +191,7 @@ impl fmt::Debug for TypeDef {
         write!(f, "Type ")?;
         match self.kind {
             TypeDefKind::Int => writeln!(f, "Int"),
+            TypeDefKind::Bool => writeln!(f, "Bool"),
         }
     }
 }
