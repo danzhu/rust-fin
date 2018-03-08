@@ -12,23 +12,20 @@ mod ir_gen;
 mod code_gen;
 mod compiler;
 
-use std::io;
-use std::process;
+use std::{io, process};
 
 use compiler::Compiler;
 
-fn run() -> i32 {
+fn run() -> Result<(), i32> {
     let mut comp = Compiler::new();
-    let res = comp.compile(io::stdin(), io::stdout());
-
-    if let Err(err) = res {
+    comp.compile(io::stdin(), io::stdout()).map_err(|err| {
         eprintln!("{}", err);
-        return 1;
-    }
-
-    0
+        1
+    })
 }
 
 fn main() {
-    process::exit(run());
+    if let Err(code) = run() {
+        process::exit(code);
+    }
 }

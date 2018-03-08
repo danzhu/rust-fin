@@ -1,5 +1,4 @@
-use std::fmt;
-use std::result;
+use std::{fmt, result};
 use std::collections::HashMap;
 
 use common::*;
@@ -191,7 +190,7 @@ impl<'a> SymTable<'a> {
         match (self.symbols.get(name), &self.parent) {
             (Some(&idx), _) => Some(idx),
             (None, &SymTableParent::Table(parent)) => parent.get(name),
-            _ => None,
+            (None, &SymTableParent::Store(_)) => None,
         }
     }
 }

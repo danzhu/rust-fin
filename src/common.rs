@@ -1,7 +1,4 @@
-use std::fmt;
-use std::ops;
-use std::slice;
-use std::usize;
+use std::{fmt, ops, slice, usize};
 
 pub const INDENT: &str = "  ";
 
@@ -94,7 +91,7 @@ impl fmt::Debug for Op {
 
 impl<T> List<T> {
     pub fn new() -> Self {
-        Self { items: Vec::new() }
+        List { items: Vec::new() }
     }
 
     pub fn len(&self) -> usize {
@@ -113,6 +110,12 @@ impl<T> List<T> {
 
     pub fn iter_mut(&mut self) -> slice::IterMut<T> {
         self.items.iter_mut()
+    }
+}
+
+impl<T> Default for List<T> {
+    fn default() -> Self {
+        List::new()
     }
 }
 
@@ -135,7 +138,7 @@ impl<'a, T> IntoIterator for &'a List<T> {
     type Item = &'a T;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.items.iter()
+        self.iter()
     }
 }
 
@@ -144,7 +147,7 @@ impl<'a, T> IntoIterator for &'a mut List<T> {
     type Item = &'a mut T;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.items.iter_mut()
+        self.iter_mut()
     }
 }
 

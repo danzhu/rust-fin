@@ -1,6 +1,4 @@
-use std::fmt;
-use std::io;
-use std::result;
+use std::{fmt, io, result};
 
 use def::Store;
 

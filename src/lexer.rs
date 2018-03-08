@@ -1,8 +1,4 @@
-use std::fmt;
-use std::io;
-use std::iter;
-use std::num;
-use std::result;
+use std::{fmt, io, iter, num, result};
 
 use common::*;
 use token::*;
@@ -63,10 +59,12 @@ where
         let mut s = String::new();
         loop {
             match self.source.peek() {
-                Some(&c) if pred(c) => s.push(c),
+                Some(&c) if pred(c) => {
+                    self.read();
+                    s.push(c);
+                }
                 _ => break s,
             }
-            self.read();
         }
     }
 }

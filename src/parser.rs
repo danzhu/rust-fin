@@ -1,6 +1,4 @@
-use std::fmt;
-use std::iter;
-use std::result;
+use std::{fmt, iter, result};
 
 use common::*;
 use token::*;
@@ -164,17 +162,16 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn term(&mut self) -> Result<Expr> {
-        match self.peek() {
-            Some(&TokenKind::Quote) => {
-                self.next();
-                let name = expect_token!(self, TokenKind::Id(name), name);
-                let args = self.args()?;
-                Ok(Expr::new(ExprKind::Function {
-                    func: Func::new(Path::new(name)),
-                    args,
-                }))
-            }
-            _ => self.factor(),
+        if let Some(&TokenKind::Quote) = self.peek() {
+            self.next();
+            let name = expect_token!(self, TokenKind::Id(name), name);
+            let args = self.args()?;
+            Ok(Expr::new(ExprKind::Function {
+                func: Func::new(Path::new(name)),
+                args,
+            }))
+        } else {
+            self.factor()
         }
 
         // TODO: method

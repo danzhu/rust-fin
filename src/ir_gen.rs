@@ -1,5 +1,4 @@
-use std::fmt;
-use std::result;
+use std::{fmt, result};
 
 use common::*;
 use ast::*;
