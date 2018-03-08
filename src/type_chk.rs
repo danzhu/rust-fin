@@ -12,6 +12,7 @@ struct Checker<'a> {
 pub enum Error {
     ArgCount { expect: usize, got: usize },
     TypeMismatch { expect: Type, got: Type },
+    ConstructPrimitive { tp: Type },
 }
 
 pub type Result = result::Result<(), Error>;
@@ -64,6 +65,38 @@ impl<'a> Checker<'a> {
                 let def = &mut self.locals[var.path.index];
                 def.tp = value.tp.clone();
                 expr.tp = Type::new(TypeKind::Void);
+            }
+            ExprKind::Construct {
+                ref mut tp,
+                ref mut args,
+            } => {
+                let path = match tp.kind {
+                    TypeKind::Named { ref path } => path,
+                    _ => panic!("construction of non-named type"),
+                };
+
+                let def = &self.store.type_defs[path.index];
+                let fields = match def.kind {
+                    TypeDefKind::Struct { ref fields } => fields,
+                    TypeDefKind::Int | TypeDefKind::Bool => {
+                        return Err(Error::ConstructPrimitive { tp: tp.clone() })
+                    }
+                };
+
+                if fields.len() != args.len() {
+                    return Err(Error::ArgCount {
+                        expect: fields.len(),
+                        got: args.len(),
+                    });
+                }
+
+                for (field, arg) in fields.iter().zip(args) {
+                    self.check(arg)?;
+
+                    expect_tp(&field.tp, &arg.tp)?;
+                }
+
+                expr.tp = tp.clone();
             }
             ExprKind::Function {
                 ref mut func,
@@ -137,6 +170,9 @@ impl fmt::Display for Error {
                 ref expect,
                 ref got,
             } => write!(f, "expect type {:?}, got {:?}", expect, got),
+            Error::ConstructPrimitive { ref tp } => {
+                write!(f, "attempt to construct primitive type {:?}", tp)
+            }
         }
     }
 }

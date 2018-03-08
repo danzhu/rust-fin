@@ -25,5 +25,6 @@ pub enum TokenKind {
     Not,
     Operator(Op),
     Id(String),
+    Type(String),
     Int(i32),
 }

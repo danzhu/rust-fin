@@ -49,6 +49,15 @@ impl<'a> Generator<'a> {
                 self.func.locals[var.path.index].reg = self.gen(value, block)?;
                 return Ok(Reg::NONE);
             }
+            ExprKind::Construct { ref tp, ref args } => {
+                let args = args.iter()
+                    .map(|arg| self.gen(arg, block))
+                    .collect::<result::Result<Vec<_>, _>>()?;
+                StmtKind::Construct {
+                    tp: tp.clone(),
+                    args,
+                }
+            }
             ExprKind::Function { ref func, ref args } => {
                 let args = args.iter()
                     .map(|arg| self.gen(arg, block))

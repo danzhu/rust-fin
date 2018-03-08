@@ -35,6 +35,7 @@ enum Value {
     Local(usize, usize),
     Temp(usize),
     Int(i32),
+    Undefined,
 }
 
 pub enum Error {
@@ -65,7 +66,7 @@ where
             writeln!(&mut output)?;
         }
 
-        let blocks = alloc_values(func);
+        let blocks = alloc_values(store, func);
 
         let mut gen = FuncGen {
             output: &mut output,
@@ -79,7 +80,7 @@ where
     Ok(())
 }
 
-fn alloc_values(func: &FuncDef) -> Vec<BlockValues> {
+fn alloc_values(store: &Store, func: &FuncDef) -> Vec<BlockValues> {
     func.ir
         .blocks
         .iter()
@@ -93,6 +94,20 @@ fn alloc_values(func: &FuncDef) -> Vec<BlockValues> {
                 .map(|(j, stmt)| match stmt.kind {
                     StmtKind::Phi { .. } | StmtKind::Binary { .. } | StmtKind::Call { .. } => {
                         Value::Local(i, j)
+                    }
+                    StmtKind::Construct { ref tp, .. } => {
+                        // TODO: remove the need to check fields for value allocation
+                        let def = &store.type_defs[tp.path().index];
+                        match def.kind {
+                            TypeDefKind::Struct { ref fields } => if fields.len() != 0 {
+                                Value::Local(i, j)
+                            } else {
+                                Value::Undefined
+                            },
+                            TypeDefKind::Int | TypeDefKind::Bool => {
+                                panic!("constructing primtive type")
+                            }
+                        }
                     }
                     StmtKind::Param(param) => {
                         let param = &func.params[param.value()];
@@ -265,6 +280,27 @@ where
                     INDENT, val, op, tp, left, right
                 )?;
             }
+            StmtKind::Construct { ref tp, ref args } => {
+                let tp = type_name(self.store, tp);
+
+                let last = args.len() - 1;
+                let mut tmp_val = Value::Undefined;
+                for (i, &arg) in args.iter().enumerate() {
+                    let arg_tp = self.reg_type(arg);
+                    let arg = self.reg(arg);
+                    let new_val = if i != last {
+                        self.temp()
+                    } else {
+                        val.clone()
+                    };
+                    writeln!(
+                        self.output,
+                        "{}{} = insertvalue {} {}, {} {}, {}",
+                        INDENT, new_val, tp, tmp_val, arg_tp, arg, i
+                    )?;
+                    tmp_val = new_val;
+                }
+            }
             StmtKind::Call { ref func, ref args } => {
                 let tp = type_name(self.store, &stmt.tp);
 
@@ -362,6 +398,7 @@ impl fmt::Display for Value {
             Value::Local(blk, idx) => write!(f, "%l_{}_{}", blk, idx),
             Value::Temp(idx) => write!(f, "%t_{}", idx),
             Value::Int(val) => write!(f, "{}", val),
+            Value::Undefined => write!(f, "undef"),
         }
     }
 }

@@ -177,6 +177,13 @@ impl Type {
     pub fn new(kind: TypeKind) -> Self {
         Self { kind }
     }
+
+    pub fn path(&self) -> &Path {
+        match self.kind {
+            TypeKind::Named { ref path } => path,
+            TypeKind::Void | TypeKind::Unknown => panic!("type with no path"),
+        }
+    }
 }
 
 impl fmt::Debug for Type {

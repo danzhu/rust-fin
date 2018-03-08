@@ -47,7 +47,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn tp(&mut self) -> Result<Type> {
-        let name = expect_token!(self, TokenKind::Id(name), name);
+        let name = expect_token!(self, TokenKind::Type(name), name);
         Ok(Type::new(TypeKind::Named {
             path: Path::new(name),
         }))
@@ -71,6 +71,16 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         Ok(Def::new(kind))
     }
 
+    fn structure(&mut self) -> Result<TypeDef> {
+        let name = expect_token!(self, TokenKind::Type(name), name);
+
+        let fields = self.bind_list()?;
+
+        expect_token!(self, TokenKind::Period);
+
+        Ok(TypeDef::new(name, TypeDefKind::Struct { fields }))
+    }
+
     fn func(&mut self) -> Result<FuncDef> {
         let name = expect_token!(self, TokenKind::Id(name), name);
 
@@ -90,16 +100,6 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         expect_token!(self, TokenKind::Period);
 
         Ok(FuncDef::new(name, params, ret, body))
-    }
-
-    fn structure(&mut self) -> Result<TypeDef> {
-        let name = expect_token!(self, TokenKind::Id(name), name);
-
-        let fields = self.bind_list()?;
-
-        expect_token!(self, TokenKind::Period);
-
-        Ok(TypeDef::new(name, TypeDefKind::Struct { fields }))
     }
 
     fn bind_list(&mut self) -> Result<Vec<BindDef>> {
@@ -164,12 +164,26 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn term(&mut self) -> Result<Expr> {
         if let Some(&TokenKind::Quote) = self.peek() {
             self.next();
-            let name = expect_token!(self, TokenKind::Id(name), name);
-            let args = self.args()?;
-            Ok(Expr::new(ExprKind::Function {
-                func: Func::new(Path::new(name)),
-                args,
-            }))
+            let kind = match self.next() {
+                Some(TokenKind::Id(name)) => {
+                    let args = self.args()?;
+                    ExprKind::Function {
+                        func: Func::new(Path::new(name)),
+                        args,
+                    }
+                }
+                Some(TokenKind::Type(name)) => {
+                    let args = self.args()?;
+                    ExprKind::Construct {
+                        tp: Type::new(TypeKind::Named {
+                            path: Path::new(name),
+                        }),
+                        args,
+                    }
+                }
+                got => return Err(Error::Expect("type or function", got)),
+            };
+            Ok(Expr::new(kind))
         } else {
             self.factor()
         }

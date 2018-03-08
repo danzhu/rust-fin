@@ -23,6 +23,7 @@ pub struct Stmt {
 pub enum StmtKind {
     Phi { values: Vec<(Reg, Index)> },
     Binary { op: Op, left: Reg, right: Reg },
+    Construct { tp: Type, args: Vec<Reg> },
     Call { func: Func, args: Vec<Reg> },
     Param(Index),
     Int(i32),
@@ -116,6 +117,12 @@ impl fmt::Debug for Stmt {
                 ref right,
             } => {
                 write!(f, "Binary {:?} {:?} {:?}", op, left, right)?;
+            }
+            StmtKind::Construct { ref tp, ref args } => {
+                write!(f, "Construct {:?}", tp)?;
+                for arg in args {
+                    write!(f, " {:?}", arg)?;
+                }
             }
             StmtKind::Call { ref func, ref args } => {
                 write!(f, "Call {:?}", func)?;

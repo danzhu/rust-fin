@@ -126,6 +126,16 @@ impl<'a> Resolver<'a> {
                 syms.add(name.clone(), idx);
                 var.path.index = idx;
             }
+            ExprKind::Construct {
+                ref mut tp,
+                ref mut args,
+            } => {
+                resolve_type(tp, self.refs)?;
+
+                for arg in args {
+                    self.resolve_expr(arg, syms)?;
+                }
+            }
             ExprKind::Function {
                 ref mut func,
                 ref mut args,

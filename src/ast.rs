@@ -17,6 +17,10 @@ pub enum ExprKind {
         value: Box<Expr>,
         var: Bind,
     },
+    Construct {
+        tp: Type,
+        args: Vec<Expr>,
+    },
     Function {
         func: Func,
         args: Vec<Expr>,
@@ -55,6 +59,9 @@ impl Expr {
             ExprKind::Let { ref value, .. } => {
                 act(value)?;
             }
+            ExprKind::Construct { ref args, .. } => for arg in args {
+                act(arg)?;
+            },
             ExprKind::Function { ref args, .. } => for arg in args {
                 act(arg)?;
             },
@@ -88,6 +95,9 @@ impl Expr {
             }
             ExprKind::Let { ref var, .. } => {
                 write!(f, "Let {:?}", var)?;
+            }
+            ExprKind::Construct { ref tp, .. } => {
+                write!(f, "Construct {:?}", tp)?;
             }
             ExprKind::Function { ref func, .. } => {
                 write!(f, "Function {:?}", func)?;

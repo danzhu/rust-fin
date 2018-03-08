@@ -111,7 +111,11 @@ where
                 "elif" => TokenKind::Elif,
                 "else" => TokenKind::Else,
                 "let" => TokenKind::Let,
-                _ => TokenKind::Id(id),
+                _ => if ch.is_lowercase() {
+                    TokenKind::Id(id)
+                } else {
+                    TokenKind::Type(id)
+                },
             }
         } else if ch.is_numeric() {
             // int

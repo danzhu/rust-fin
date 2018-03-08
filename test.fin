@@ -3,6 +3,10 @@ struct Vec
     y Int
 .
 
+def vec x Int y Int -> Vec as
+    'Vec x y
+.
+
 def fib n Int -> Int as
     if n = 0 then
         0
@@ -14,6 +18,7 @@ def fib n Int -> Int as
 .
 
 def main -> Int as
+    'vec 3 4 -> let v,
     if 20 -> let i, i > 0 then
         'fib i
     else
