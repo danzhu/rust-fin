@@ -6,26 +6,47 @@ use token::*;
 use ast::*;
 use def::*;
 
-struct Parser<T: Iterator<Item = Token>> {
-    source: iter::Peekable<T>,
+struct Parser<Iter: Iterator<Item = Token>> {
+    source: iter::Peekable<Iter>,
+    span: Span,
 }
 
-pub enum Error {
-    Expect(&'static str, Option<TokenKind>),
+pub struct Error {
+    pub kind: ErrorKind,
+    pub span: Span,
+}
+
+pub enum ErrorKind {
+    Expect {
+        expect: &'static str,
+        got: Option<TokenKind>,
+    },
 }
 
 pub type Result<T> = result::Result<T, Error>;
 
-macro_rules! expect_token {
-    ($src:expr, $pat:pat, $res:expr) => {
-        match $src.next() {
-            Some($pat) => $res,
-            got => return Err(Error::Expect(stringify!($pat), got)),
+macro_rules! expect {
+    ($self:expr, $pat:ident) => {
+        match $self.next() {
+            Some(TokenKind::$pat) => {},
+            got => return $self.error(ErrorKind::Expect {
+                expect: stringify!($pat),
+                got
+            }),
         }
-    };
-    ($src:expr, $pat:pat) => {
-        expect_token!($src, $pat, {})
-    };
+    }
+}
+
+macro_rules! expect_value {
+    ($self:expr, $pat:ident) => {
+        match $self.next() {
+            Some(TokenKind::$pat(val)) => val,
+            got => return $self.error(ErrorKind::Expect {
+                expect: stringify!($pat),
+                got
+            }),
+        }
+    }
 }
 
 pub fn parse<Iter>(tokens: Iter) -> Result<Source>
@@ -34,21 +55,32 @@ where
 {
     let mut par = Parser {
         source: tokens.peekable(),
+        span: Span::ZERO,
     };
     par.module()
 }
 
-impl<T: Iterator<Item = Token>> Parser<T> {
+impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     fn next(&mut self) -> Option<TokenKind> {
-        self.source.next().map(|token| token.kind)
+        self.source.next().map(|Token { kind, span }| {
+            self.span = span;
+            kind
+        })
     }
 
     fn peek(&mut self) -> Option<&TokenKind> {
         self.source.peek().map(|token| &token.kind)
     }
 
+    fn error<T>(&self, kind: ErrorKind) -> Result<T> {
+        Err(Error {
+            kind,
+            span: self.span,
+        })
+    }
+
     fn tp(&mut self) -> Result<Type> {
-        let name = expect_token!(self, TokenKind::Type(name), name);
+        let name = expect_value!(self, Type);
         Ok(Type::new(TypeKind::Named {
             path: Path::new(name),
         }))
@@ -66,18 +98,23 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         let kind = match self.next() {
             Some(TokenKind::Struct) => DefKind::Type(self.structure()?),
             Some(TokenKind::Def) => DefKind::Func(self.func()?),
-            got => return Err(Error::Expect("top-level definition", got)),
+            got => {
+                return self.error(ErrorKind::Expect {
+                    expect: "top-level definition",
+                    got,
+                })
+            }
         };
 
         Ok(Def::new(kind))
     }
 
     fn structure(&mut self) -> Result<TypeDef> {
-        let name = expect_token!(self, TokenKind::Type(name), name);
+        let name = expect_value!(self, Type);
 
         let fields = self.bind_list()?;
 
-        expect_token!(self, TokenKind::Period);
+        expect!(self, Period);
 
         Ok(TypeDef::new(
             name,
@@ -89,7 +126,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn func(&mut self) -> Result<FuncDef> {
-        let name = expect_token!(self, TokenKind::Id(name), name);
+        let name = expect_value!(self, Id);
 
         let params = self.bind_list()?;
 
@@ -100,11 +137,11 @@ impl<T: Iterator<Item = Token>> Parser<T> {
             Type::new(TypeKind::Void)
         };
 
-        expect_token!(self, TokenKind::As);
+        expect!(self, As);
 
         let body = self.block()?;
 
-        expect_token!(self, TokenKind::Period);
+        expect!(self, Period);
 
         Ok(FuncDef::new(name, params, ret, body))
     }
@@ -118,7 +155,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn bind(&mut self) -> Result<BindDef> {
-        let name = expect_token!(self, TokenKind::Id(name), name);
+        let name = expect_value!(self, Id);
         let mut bind = BindDef::new(name);
         bind.tp = self.tp()?;
         Ok(bind)
@@ -143,8 +180,8 @@ impl<T: Iterator<Item = Token>> Parser<T> {
         if let Some(&TokenKind::Arrow) = self.peek() {
             self.next();
             // TODO: pattern
-            expect_token!(self, TokenKind::Let);
-            let var = expect_token!(self, TokenKind::Id(name), name);
+            expect!(self, Let);
+            let var = expect_value!(self, Id);
             Ok(Expr::new(ExprKind::Let {
                 value: Box::new(expr),
                 var: Bind::new(Path::new(var)),
@@ -157,7 +194,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     fn expr(&mut self) -> Result<Expr> {
         let mut expr = self.term()?;
         while let Some(&TokenKind::Operator(_)) = self.peek() {
-            let op = expect_token!(self, TokenKind::Operator(op), op);
+            let op = expect_value!(self, Operator);
             let right = self.term()?;
             expr = Expr::new(ExprKind::Binary {
                 op,
@@ -188,7 +225,12 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                         args,
                     }
                 }
-                got => return Err(Error::Expect("type or function", got)),
+                got => {
+                    return self.error(ErrorKind::Expect {
+                        expect: "type or function",
+                        got,
+                    })
+                }
             };
             Expr::new(kind)
         } else {
@@ -197,7 +239,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
         while let Some(&TokenKind::Quote) = self.peek() {
             self.next();
-            let name = expect_token!(self, TokenKind::Id(name), name);
+            let name = expect_value!(self, Id);
             expr = Expr::new(ExprKind::Member {
                 value: Box::new(expr),
                 mem: Member::new(Path::new(name)),
@@ -225,27 +267,31 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn factor(&mut self) -> Result<Expr> {
-        match self.next() {
-            Some(TokenKind::Id(name)) => Ok(Expr::new(ExprKind::Id(Bind::new(Path::new(name))))),
-            Some(TokenKind::Int(val)) => Ok(Expr::new(ExprKind::Int(val))),
+        let kind = match self.next() {
+            Some(TokenKind::Id(name)) => ExprKind::Id(Bind::new(Path::new(name))),
+            Some(TokenKind::Int(val)) => ExprKind::Int(val),
             Some(TokenKind::If) => {
                 let cond = self.cond()?;
-                expect_token!(self, TokenKind::Period);
-                Ok(cond)
+                expect!(self, Period);
+                return Ok(cond);
             }
             Some(TokenKind::LParen) => {
                 let block = self.block()?;
-                expect_token!(self, TokenKind::RParen);
-                Ok(block)
+                expect!(self, RParen);
+                return Ok(block);
             }
-            got => Err(Error::Expect("value", got)),
-        }
+            got => return self.error(ErrorKind::Expect {
+                expect: "value",
+                got,
+            }),
+        };
+        Ok(Expr::new(kind))
     }
 
     fn cond(&mut self) -> Result<Expr> {
         let cond = self.block()?;
 
-        expect_token!(self, TokenKind::Then);
+        expect!(self, Then);
         let succ = self.block()?;
 
         let fail = match self.peek() {
@@ -270,8 +316,18 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Expect(exp, ref token) => write!(f, "expect {}, but got {:?}", exp, token),
+        write!(f, "{}: error: ", self.span.start)?;
+        match self.kind {
+            ErrorKind::Expect {
+                expect,
+                got: Some(ref got),
+            } => {
+                write!(f, "expect {}, but got {:?}", expect, got)?;
+            }
+            ErrorKind::Expect { expect, got: None } => {
+                write!(f, "expect {}, but reached EOF", expect)?;
+            }
         }
+        Ok(())
     }
 }

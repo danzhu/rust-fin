@@ -56,11 +56,11 @@ impl From<code_gen::Error> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Lexer(ref err) => write!(f, "lexing error: {}", err),
-            Error::Parser(ref err) => write!(f, "parsing error: {}", err),
-            Error::NameRes(ref err) => write!(f, "name resolution error: {}", err),
-            Error::TypeChecker(ref err) => write!(f, "type check error: {}", err),
-            Error::CodeGen(ref err) => write!(f, "code generation error: {}", err),
+            Error::Lexer(ref err) => write!(f, "{}", err),
+            Error::Parser(ref err) => write!(f, "{}", err),
+            Error::NameRes(ref err) => write!(f, "{}", err),
+            Error::TypeChecker(ref err) => write!(f, "{}", err),
+            Error::CodeGen(ref err) => write!(f, "{}", err),
         }
     }
 }

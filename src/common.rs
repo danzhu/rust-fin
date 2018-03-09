@@ -3,15 +3,15 @@ use std::{fmt, ops, slice, usize};
 pub const INDENT: &str = "  ";
 
 #[derive(Copy, Clone, Debug)]
-pub struct Pos {
-    pub line: i32,
-    pub column: i32,
-}
-
-#[derive(Copy, Clone, Debug)]
 pub struct Span {
     pub start: Pos,
     pub end: Pos,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Pos {
+    pub line: i32,
+    pub column: i32,
 }
 
 #[derive(Copy, Clone)]
@@ -82,6 +82,23 @@ pub enum Path {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Segs {
     pub name: String,
+}
+
+impl Span {
+    pub const ZERO: Span = Span {
+        start: Pos::ZERO,
+        end: Pos::ZERO,
+    };
+}
+
+impl Pos {
+    pub const ZERO: Pos = Pos { line: 0, column: 0 };
+}
+
+impl fmt::Display for Pos {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.line, self.column)
+    }
 }
 
 impl fmt::Debug for Op {

@@ -8,7 +8,12 @@ struct Lexer<Iter: Iterator<Item = char>> {
     pos: Pos,
 }
 
-pub enum Error {
+pub struct Error {
+    pub kind: ErrorKind,
+    pub pos: Pos,
+}
+
+pub enum ErrorKind {
     Io(io::Error),
     ParseInt(num::ParseIntError),
     UnexpectedChar(char),
@@ -67,6 +72,10 @@ where
             }
         }
     }
+
+    fn error<T>(&self, kind: ErrorKind, pos: Pos) -> Option<Result<T>> {
+        Some(Err(Error { kind, pos }))
+    }
 }
 
 impl<Iter> Iterator for Lexer<Iter>
@@ -119,9 +128,10 @@ where
             }
         } else if ch.is_numeric() {
             // int
-            match self.read_while(|c| c.is_numeric()).parse() {
+            let val = self.read_while(|c| c.is_numeric());
+            match val.parse() {
                 Ok(val) => TokenKind::Int(val),
-                Err(err) => return Some(Err(Error::ParseInt(err))),
+                Err(err) => return self.error(ErrorKind::ParseInt(err), start),
             }
         } else {
             self.read();
@@ -150,7 +160,7 @@ where
                 '.' => TokenKind::Period,
                 '(' => TokenKind::LParen,
                 ')' => TokenKind::RParen,
-                _ => return Some(Err(Error::UnexpectedChar(ch))),
+                _ => return self.error(ErrorKind::UnexpectedChar(ch), start),
             }
         };
 
@@ -165,16 +175,20 @@ where
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Io(ref err) => write!(f, "{}", err),
-            Error::ParseInt(ref err) => write!(f, "{}", err),
-            Error::UnexpectedChar(ch) => write!(f, "unexpected character '{}'", ch),
+        write!(f, "{}: error: ", self.pos)?;
+        match self.kind {
+            ErrorKind::Io(ref err) => write!(f, "{}", err),
+            ErrorKind::ParseInt(ref err) => write!(f, "{}", err),
+            ErrorKind::UnexpectedChar(ch) => write!(f, "unexpected character '{}'", ch),
         }
     }
 }
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
-        Error::Io(err)
+        Error {
+            kind: ErrorKind::Io(err),
+            pos: Pos { line: 0, column: 0 },
+        }
     }
 }
