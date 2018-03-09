@@ -1,58 +1,52 @@
-use std::{fmt, result};
-
 use common::*;
 use ast::*;
 use ir::*;
 use def::*;
 
-struct Generator<'a> {
-    func: &'a mut FuncDef,
+struct Generator {
+    ir: Ir,
 }
 
-pub enum Error {}
+pub fn generate(store: &mut Store) {
+    for func in &mut store.func_defs {
+        let mut gen = Generator { ir: Ir::new() };
 
-pub type Result<T> = result::Result<T, Error>;
-
-pub fn generate(store: &mut Store) -> Result<()> {
-    let mut func_defs = store.func_defs.clone();
-    for (orig, func) in store.func_defs.iter().zip(func_defs.iter_mut()) {
         // entry block and params
-        let mut block = func.ir.push_block();
-        for (i, param) in func.params.iter_mut().enumerate() {
+        let mut block = gen.ir.push_block();
+        for (i, param) in func.params.iter().enumerate() {
             let idx = Index::new(i);
             let stmt = Stmt::new(StmtKind::Param(idx), param.tp.clone());
-            // TODO: find a way to sync params and locals
-            func.locals[idx].reg = func.ir.write(block, stmt);
+            let reg = gen.ir.write(block, stmt);
+            gen.ir.locals.push(reg);
         }
 
-        let res = {
-            let mut gen = Generator { func };
-            gen.gen(&orig.body, &mut block)?
-        };
-        func.ir.end(block, Term::Ret(res));
+        let res = gen.gen(&func.body, &mut block);
+        gen.ir.end(block, Term::Ret(res));
+
+        func.ir = gen.ir;
     }
-    store.func_defs = func_defs;
-    Ok(())
 }
 
-impl<'a> Generator<'a> {
-    fn gen(&mut self, expr: &Expr, block: &mut Index) -> Result<Reg> {
+impl Generator {
+    fn gen(&mut self, expr: &Expr, block: &mut Index) -> Option<Reg> {
         let kind = match expr.kind {
             ExprKind::Block { ref stmts } => {
-                let mut reg = Reg::NONE;
+                let mut reg = None;
                 for stmt in stmts {
-                    reg = self.gen(stmt, block)?;
+                    reg = self.gen(stmt, block);
                 }
-                return Ok(reg);
+                return reg;
             }
-            ExprKind::Let { ref value, ref var } => {
-                self.func.locals[var.path.index()].reg = self.gen(value, block)?;
-                return Ok(Reg::NONE);
+            ExprKind::Let { ref value, .. } => {
+                let reg = self.gen(value, block).unwrap();
+                // TODO: this assumes same visiting order - better solution?
+                self.ir.locals.push(reg);
+                return None;
             }
             ExprKind::Construct { ref tp, ref args } => {
                 let args = args.iter()
-                    .map(|arg| self.gen(arg, block))
-                    .collect::<result::Result<Vec<_>, _>>()?;
+                    .map(|arg| self.gen(arg, block).unwrap())
+                    .collect();
                 StmtKind::Construct {
                     tp: tp.clone(),
                     args,
@@ -60,15 +54,15 @@ impl<'a> Generator<'a> {
             }
             ExprKind::Function { ref func, ref args } => {
                 let args = args.iter()
-                    .map(|arg| self.gen(arg, block))
-                    .collect::<result::Result<Vec<_>, _>>()?;
+                    .map(|arg| self.gen(arg, block).unwrap())
+                    .collect();
                 StmtKind::Call {
                     func: func.clone(),
                     args,
                 }
             }
             ExprKind::Member { ref value, ref mem } => {
-                let value = self.gen(value, block)?;
+                let value = self.gen(value, block).unwrap();
                 StmtKind::Member {
                     value,
                     mem: mem.clone(),
@@ -79,8 +73,8 @@ impl<'a> Generator<'a> {
                 ref left,
                 ref right,
             } => {
-                let left = self.gen(left, block)?;
-                let right = self.gen(right, block)?;
+                let left = self.gen(left, block).unwrap();
+                let right = self.gen(right, block).unwrap();
                 StmtKind::Binary { op, left, right }
             }
             ExprKind::If {
@@ -88,12 +82,12 @@ impl<'a> Generator<'a> {
                 ref succ,
                 ref fail,
             } => {
-                let mut succ_block = self.func.ir.push_block();
-                let mut fail_block = self.func.ir.push_block();
-                let end_block = self.func.ir.push_block();
+                let mut succ_block = self.ir.push_block();
+                let mut fail_block = self.ir.push_block();
+                let end_block = self.ir.push_block();
 
-                let cond = self.gen(cond, block)?;
-                self.func.ir.end(
+                let cond = self.gen(cond, block).unwrap();
+                self.ir.end(
                     *block,
                     Term::Br {
                         cond,
@@ -102,11 +96,11 @@ impl<'a> Generator<'a> {
                     },
                 );
 
-                let succ = self.gen(succ, &mut succ_block)?;
-                self.func.ir.end(succ_block, Term::Goto(end_block));
+                let succ = self.gen(succ, &mut succ_block).unwrap();
+                self.ir.end(succ_block, Term::Goto(end_block));
 
-                let fail = self.gen(fail, &mut fail_block)?;
-                self.func.ir.end(fail_block, Term::Goto(end_block));
+                let fail = self.gen(fail, &mut fail_block).unwrap();
+                self.ir.end(fail_block, Term::Goto(end_block));
 
                 *block = end_block;
                 StmtKind::Phi {
@@ -114,20 +108,15 @@ impl<'a> Generator<'a> {
                 }
             }
             ExprKind::Id(ref bind) => {
-                return Ok(self.func.locals[bind.path.index()].reg);
+                return Some(self.ir.locals[bind.path.index()]);
             }
             ExprKind::Int(val) => StmtKind::Int(val),
             ExprKind::Noop => {
-                return Ok(Reg::NONE);
+                return None;
             }
         };
 
-        Ok(self.func.ir.write(*block, Stmt::new(kind, expr.tp.clone())))
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
-        Ok(())
+        let reg = self.ir.write(*block, Stmt::new(kind, expr.tp.clone()));
+        Some(reg)
     }
 }

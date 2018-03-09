@@ -26,9 +26,7 @@ pub struct Store {
     pub func_defs: List<FuncDef>,
     pub sym_table: HashMap<String, Symbol>,
 
-    pub def_int: Index,
     pub type_int: Type,
-    pub def_bool: Index,
     pub type_bool: Type,
 }
 
@@ -67,7 +65,6 @@ pub struct FuncDef {
 pub struct BindDef {
     pub name: String,
     pub tp: Type,
-    pub reg: Reg,
 }
 
 #[derive(Copy, Clone)]
@@ -77,12 +74,11 @@ pub enum Symbol {
 }
 
 macro_rules! define_tp {
-    ($store:expr, $def:ident, $type:ident, $name:ident) => {{
+    ($store:expr, $type:ident, $name:ident) => {{
         let kind = TypeDefKind::Builtin(BuiltinType::$name);
         let tp = TypeDef::new(stringify!($name), kind);
         let idx = $store.define_type(tp);
         let path = Path::Resolved(idx);
-        $store.$def = idx;
         $store.$type = Type::new(TypeKind::Named { path });
     }}
 }
@@ -124,14 +120,12 @@ impl Store {
             func_defs: List::new(),
             sym_table: HashMap::new(),
 
-            def_int: Index::UNKNOWN,
             type_int: Type::new(TypeKind::Unknown),
-            def_bool: Index::UNKNOWN,
             type_bool: Type::new(TypeKind::Unknown),
         };
 
-        define_tp!(store, def_int, type_int, Int);
-        define_tp!(store, def_bool, type_bool, Bool);
+        define_tp!(store, type_int, Int);
+        define_tp!(store, type_bool, Bool);
 
         store
     }
@@ -263,7 +257,6 @@ impl BindDef {
         Self {
             name,
             tp: Type::new(TypeKind::Unknown),
-            reg: Reg::NONE,
         }
     }
 }

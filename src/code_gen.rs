@@ -36,6 +36,7 @@ enum Value {
     Temp(usize),
     Int(i32),
     Undefined,
+    None,
 }
 
 pub enum Error {
@@ -92,10 +93,16 @@ fn alloc_values(store: &Store, func: &FuncDef) -> Vec<BlockValues> {
                 .iter()
                 .enumerate()
                 .map(|(j, stmt)| match stmt.kind {
-                    StmtKind::Phi { .. }
-                    | StmtKind::Binary { .. }
-                    | StmtKind::Call { .. }
-                    | StmtKind::Member { .. } => Value::Local(i, j),
+                    StmtKind::Phi { .. } | StmtKind::Binary { .. } | StmtKind::Member { .. } => {
+                        Value::Local(i, j)
+                    }
+                    StmtKind::Call { .. } => {
+                        if stmt.tp.kind == TypeKind::Void {
+                            Value::None
+                        } else {
+                            Value::Local(i, j)
+                        }
+                    }
                     StmtKind::Construct { ref tp, .. } => {
                         // TODO: remove the need to check fields for value allocation
                         let def = &store.type_defs[tp.path().index()];
@@ -308,7 +315,11 @@ where
                 let func = &self.store.func_defs[func.path.index()];
                 let name = funcdef_name(func);
 
-                write!(self.output, "{}{} = call {} {}(", INDENT, val, tp, name)?;
+                if stmt.tp.kind == TypeKind::Void {
+                    write!(self.output, "{}call {} {}(", INDENT, tp, name)?;
+                } else {
+                    write!(self.output, "{}{} = call {} {}(", INDENT, val, tp, name)?;
+                }
 
                 let mut first = true;
                 for &arg in args {
@@ -361,11 +372,14 @@ where
 
                 writeln!(self.output, "{}br label {}", INDENT, tar)?;
             }
-            Term::Ret(reg) => {
+            Term::Ret(Some(reg)) => {
                 let tp = self.reg_type(reg);
                 let reg = self.reg(reg);
 
                 writeln!(self.output, "{}ret {} {}", INDENT, tp, reg)?;
+            }
+            Term::Ret(None) => {
+                writeln!(self.output, "{}ret void", INDENT)?;
             }
             Term::Unreachable => {
                 writeln!(self.output, "{}unreachable", INDENT)?;
@@ -411,6 +425,7 @@ impl fmt::Display for Value {
             Value::Temp(idx) => write!(f, "%t_{}", idx),
             Value::Int(val) => write!(f, "{}", val),
             Value::Undefined => write!(f, "undef"),
+            Value::None => panic!("attempt to use none value"),
         }
     }
 }

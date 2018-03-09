@@ -4,6 +4,7 @@ use common::*;
 
 #[derive(Clone)]
 pub struct Ir {
+    pub locals: List<Reg>,
     pub blocks: List<Block>,
 }
 
@@ -34,7 +35,7 @@ pub enum StmtKind {
 pub enum Term {
     Br { cond: Reg, succ: Index, fail: Index },
     Goto(Index),
-    Ret(Reg),
+    Ret(Option<Reg>),
     Unreachable,
 }
 
@@ -47,6 +48,7 @@ pub struct Reg {
 impl Ir {
     pub fn new() -> Self {
         Self {
+            locals: List::new(),
             blocks: List::new(),
         }
     }
@@ -151,17 +153,11 @@ impl fmt::Debug for Term {
         match *self {
             Term::Br { cond, succ, fail } => write!(f, "Br {:?} {:?} {:?}", cond, succ, fail),
             Term::Goto(block) => write!(f, "Goto {:?}", block),
-            Term::Ret(reg) => write!(f, "Ret {:?}", reg),
+            Term::Ret(Some(reg)) => write!(f, "Ret {:?}", reg),
+            Term::Ret(None) => write!(f, "Ret"),
             Term::Unreachable => write!(f, "Unreachable"),
         }
     }
-}
-
-impl Reg {
-    pub const NONE: Reg = Reg {
-        block: Index::UNKNOWN,
-        stmt: Index::UNKNOWN,
-    };
 }
 
 impl fmt::Debug for Reg {

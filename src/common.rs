@@ -163,8 +163,6 @@ impl<'a, T> IntoIterator for &'a mut List<T> {
 }
 
 impl Index {
-    pub const UNKNOWN: Index = Index(usize::MAX);
-
     pub fn new(idx: usize) -> Self {
         Index(idx)
     }
@@ -176,11 +174,7 @@ impl Index {
 
 impl fmt::Debug for Index {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if *self != Index::UNKNOWN {
-            write!(f, "{}", self.0)
-        } else {
-            write!(f, "?")
-        }
+        write!(f, "{}", self.0)
     }
 }
 
@@ -275,7 +269,7 @@ impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Path::Unresolved(ref segs) => write!(f, "{:?}", segs.name),
-            Path::Resolved(idx) => write!(f, "{:?}", idx),
+            Path::Resolved(idx) => write!(f, "#{:?}", idx),
         }
     }
 }

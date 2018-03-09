@@ -21,7 +21,12 @@ def fib n Int -> Int as
     .
 .
 
+def test as
+    1 -> let a
+.
+
 def main -> Int as
+    'test,
     'vec 3 4 -> let v,
     if 'len v -> let i, i > 0 then
         'fib i

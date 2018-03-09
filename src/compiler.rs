@@ -16,11 +16,9 @@ pub struct Compiler {
 pub enum Error {
     Lexer(lexer::Error),
     Parser(parser::Error),
-    Resolver(name_res::Error),
+    NameRes(name_res::Error),
     TypeChecker(type_chk::Error),
-    IrGenerator(ir_gen::Error),
     CodeGen(code_gen::Error),
-    Io(io::Error),
 }
 
 type Result = result::Result<(), Error>;
@@ -39,7 +37,7 @@ impl From<parser::Error> for Error {
 
 impl From<name_res::Error> for Error {
     fn from(err: name_res::Error) -> Error {
-        Error::Resolver(err)
+        Error::NameRes(err)
     }
 }
 
@@ -49,21 +47,9 @@ impl From<type_chk::Error> for Error {
     }
 }
 
-impl From<ir_gen::Error> for Error {
-    fn from(err: ir_gen::Error) -> Error {
-        Error::IrGenerator(err)
-    }
-}
-
 impl From<code_gen::Error> for Error {
     fn from(err: code_gen::Error) -> Error {
         Error::CodeGen(err)
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error::Io(err)
     }
 }
 
@@ -72,11 +58,9 @@ impl fmt::Display for Error {
         match *self {
             Error::Lexer(ref err) => write!(f, "lexing error: {}", err),
             Error::Parser(ref err) => write!(f, "parsing error: {}", err),
-            Error::Resolver(ref err) => write!(f, "name resolution error: {}", err),
+            Error::NameRes(ref err) => write!(f, "name resolution error: {}", err),
             Error::TypeChecker(ref err) => write!(f, "type check error: {}", err),
-            Error::IrGenerator(ref err) => write!(f, "ir generation error: {}", err),
             Error::CodeGen(ref err) => write!(f, "code generation error: {}", err),
-            Error::Io(ref err) => write!(f, "io error: {}", err),
         }
     }
 }
@@ -99,7 +83,7 @@ impl Compiler {
         name_res::resolve_decls(&mut self.store)?;
         name_res::resolve_defs(&mut self.store)?;
         type_chk::type_check(&mut self.store)?;
-        ir_gen::generate(&mut self.store)?;
+        ir_gen::generate(&mut self.store);
 
         eprint!("{:?}", self.store);
 
