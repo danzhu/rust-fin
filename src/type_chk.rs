@@ -79,7 +79,7 @@ impl<'a> Checker<'a> {
                 let def = &self.store.type_defs[path.index];
                 let fields = match def.kind {
                     TypeDefKind::Struct { ref fields, .. } => fields,
-                    TypeDefKind::Int | TypeDefKind::Bool => {
+                    TypeDefKind::Builtin(_) => {
                         return Err(Error::ConstructPrimitive { tp: tp.clone() });
                     }
                 };
@@ -144,7 +144,7 @@ impl<'a> Checker<'a> {
                         mem.path.index = idx;
                         expr.tp = fields[idx.value()].tp.clone();
                     }
-                    TypeDefKind::Int | TypeDefKind::Bool => {
+                    TypeDefKind::Builtin(_) => {
                         return Err(Error::MemberNotFound {
                             tp: value.tp.clone(),
                             mem: mem.clone(),

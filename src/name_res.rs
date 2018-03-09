@@ -50,7 +50,7 @@ pub fn resolve_decls(store: &mut Store) -> Result {
                 TypeDefKind::Struct { ref mut fields, .. } => for field in fields {
                     resolve_type(&mut field.tp, refs)?;
                 },
-                TypeDefKind::Int | TypeDefKind::Bool => {}
+                TypeDefKind::Builtin(_) => {}
             }
         }
         for func in &mut func_defs {
@@ -77,7 +77,7 @@ pub fn resolve_defs(store: &mut Store) -> Result {
             } => for (i, field) in fields.iter().enumerate() {
                 sym_table.insert(field.name.clone(), Index::new(i));
             },
-            TypeDefKind::Int | TypeDefKind::Bool => {}
+            TypeDefKind::Builtin(_) => {}
         }
     }
 

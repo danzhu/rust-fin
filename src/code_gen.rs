@@ -105,9 +105,7 @@ fn alloc_values(store: &Store, func: &FuncDef) -> Vec<BlockValues> {
                             } else {
                                 Value::Local(i, j)
                             },
-                            TypeDefKind::Int | TypeDefKind::Bool => {
-                                panic!("constructing primtive type")
-                            }
+                            TypeDefKind::Builtin(_) => panic!("constructing primtive type"),
                         }
                     }
                     StmtKind::Param(param) => {
@@ -146,7 +144,7 @@ where
 
             writeln!(output, " }}")?;
         }
-        TypeDefKind::Int | TypeDefKind::Bool => {}
+        TypeDefKind::Builtin(_) => {}
     }
     Ok(())
 }
@@ -165,8 +163,10 @@ fn type_name(store: &Store, tp: &Type) -> Value {
 fn typedef_name(tp: &TypeDef) -> Value {
     match tp.kind {
         TypeDefKind::Struct { .. } => Value::Type(tp.name.clone()),
-        TypeDefKind::Int => Value::Builtin("i32"),
-        TypeDefKind::Bool => Value::Builtin("i1"),
+        TypeDefKind::Builtin(ref tp) => Value::Builtin(match *tp {
+            BuiltinType::Int => "i32",
+            BuiltinType::Bool => "i1",
+        }),
     }
 }
 

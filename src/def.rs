@@ -44,6 +44,11 @@ pub enum TypeDefKind {
         fields: Vec<BindDef>,
         sym_table: HashMap<String, Index>,
     },
+    Builtin(BuiltinType),
+}
+
+#[derive(Clone)]
+pub enum BuiltinType {
     Int,
     Bool,
 }
@@ -73,7 +78,9 @@ pub enum Symbol {
 
 macro_rules! define_tp {
     ($store:expr, $def:ident, $type:ident, $name:ident) => {{
-        let idx = $store.define_type(TypeDef::new(stringify!($name), TypeDefKind::$name));
+        let kind = TypeDefKind::Builtin(BuiltinType::$name);
+        let tp = TypeDef::new(stringify!($name), kind);
+        let idx = $store.define_type(tp);
         let mut path = Path::new(stringify!($name));
         path.index = idx;
         $store.$def = idx;
@@ -206,12 +213,19 @@ impl fmt::Debug for TypeDef {
                 }
                 Ok(())
             }
-            TypeDefKind::Int => writeln!(f, "Int"),
-            TypeDefKind::Bool => writeln!(f, "Bool"),
+            TypeDefKind::Builtin(ref tp) => writeln!(f, "{:?}", tp),
         }
     }
 }
 
+impl fmt::Debug for BuiltinType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BuiltinType::Int => writeln!(f, "Int"),
+            BuiltinType::Bool => writeln!(f, "Bool"),
+        }
+    }
+}
 impl FuncDef {
     pub fn new<Str>(name: Str, params: Vec<BindDef>, ret: Type, body: Expr) -> Self
     where
