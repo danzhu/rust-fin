@@ -46,7 +46,7 @@ impl<'a> Generator<'a> {
                 return Ok(reg);
             }
             ExprKind::Let { ref value, ref var } => {
-                self.func.locals[var.path.index].reg = self.gen(value, block)?;
+                self.func.locals[var.path.index()].reg = self.gen(value, block)?;
                 return Ok(Reg::NONE);
             }
             ExprKind::Construct { ref tp, ref args } => {
@@ -114,7 +114,7 @@ impl<'a> Generator<'a> {
                 }
             }
             ExprKind::Id(ref bind) => {
-                return Ok(self.func.locals[bind.path.index].reg);
+                return Ok(self.func.locals[bind.path.index()].reg);
             }
             ExprKind::Int(val) => StmtKind::Int(val),
             ExprKind::Noop => {

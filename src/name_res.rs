@@ -29,14 +29,14 @@ pub enum Error {
 
 pub type Result = result::Result<(), Error>;
 
-macro_rules! expect_sym {
+macro_rules! resolve_path {
     ($store:expr, $path:expr, $kind:ident) => {{
-        let path: &Path = $path;
-        match $store.get_sym(path) {
-            Some(Symbol::$kind(idx)) => idx,
+        let path: &mut Path = $path;
+        *path = match $store.get_sym(path.segs()) {
+            Some(Symbol::$kind(idx)) => Path::Resolved(idx),
             Some(sym) => return Err(Error::WrongSymbolKind(stringify!($kind), sym)),
             None => return Err(Error::SymbolNotFound(stringify!($kind), path.clone())),
-        }
+        };
     }}
 }
 
@@ -95,7 +95,7 @@ pub fn resolve_defs(store: &mut Store) -> Result {
 fn resolve_type(tp: &mut Type, refs: &RefTable) -> Result {
     match tp.kind {
         TypeKind::Named { ref mut path } => {
-            path.index = expect_sym!(refs, path, Type);
+            resolve_path!(refs, path, Type);
         }
         TypeKind::Void | TypeKind::Unknown => {}
     }
@@ -103,7 +103,7 @@ fn resolve_type(tp: &mut Type, refs: &RefTable) -> Result {
 }
 
 fn resolve_func(func: &mut Func, refs: &RefTable) -> Result {
-    func.path.index = expect_sym!(refs, &func.path, Func);
+    resolve_path!(refs, &mut func.path, Func);
     Ok(())
 }
 
@@ -136,11 +136,14 @@ impl<'a> Resolver<'a> {
             } => {
                 self.resolve_expr(value, syms)?;
 
-                let name = &var.path.name;
-                let bind = BindDef::new(name.clone());
-                let idx = self.locals.push(bind);
-                syms.add(name.clone(), idx);
-                var.path.index = idx;
+                let idx = {
+                    let name = var.path.name();
+                    let bind = BindDef::new(name.clone());
+                    let idx = self.locals.push(bind);
+                    syms.add(name.clone(), idx);
+                    idx
+                };
+                var.path = Path::Resolved(idx);
             }
             ExprKind::Construct {
                 ref mut tp,
@@ -187,8 +190,9 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(fail, &mut fail_syms)?;
             }
             ExprKind::Id(ref mut bind) => {
-                bind.path.index = syms.get(&bind.path.name)
+                let idx = syms.get(bind.path.name())
                     .ok_or_else(|| Error::SymbolNotFound("Id", bind.path.clone()))?;
+                bind.path = Path::Resolved(idx);
             }
             ExprKind::Int(_) | ExprKind::Noop => {}
         }

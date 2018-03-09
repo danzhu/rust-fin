@@ -63,7 +63,7 @@ impl<'a> Checker<'a> {
             } => {
                 self.check(value)?;
 
-                let def = &mut self.locals[var.path.index];
+                let def = &mut self.locals[var.path.index()];
                 def.tp = value.tp.clone();
                 expr.tp = Type::new(TypeKind::Void);
             }
@@ -76,7 +76,7 @@ impl<'a> Checker<'a> {
                     _ => panic!("construction of non-named type"),
                 };
 
-                let def = &self.store.type_defs[path.index];
+                let def = &self.store.type_defs[path.index()];
                 let fields = match def.kind {
                     TypeDefKind::Struct { ref fields, .. } => fields,
                     TypeDefKind::Builtin(_) => {
@@ -103,7 +103,7 @@ impl<'a> Checker<'a> {
                 ref mut func,
                 ref mut args,
             } => {
-                let def = &self.store.func_defs[func.path.index];
+                let def = &self.store.func_defs[func.path.index()];
 
                 if def.params.len() != args.len() {
                     return Err(Error::ArgCount {
@@ -126,13 +126,13 @@ impl<'a> Checker<'a> {
             } => {
                 self.check(value)?;
 
-                let def = &self.store.type_defs[value.tp.path().index];
+                let def = &self.store.type_defs[value.tp.path().index()];
                 match def.kind {
                     TypeDefKind::Struct {
                         ref fields,
                         ref sym_table,
                     } => {
-                        let idx = match sym_table.get(&mem.path.name) {
+                        let idx = match sym_table.get(mem.path.name()) {
                             Some(&idx) => idx,
                             None => {
                                 return Err(Error::MemberNotFound {
@@ -141,7 +141,7 @@ impl<'a> Checker<'a> {
                                 })
                             }
                         };
-                        mem.path.index = idx;
+                        mem.path = Path::Resolved(idx);
                         expr.tp = fields[idx.value()].tp.clone();
                     }
                     TypeDefKind::Builtin(_) => {
@@ -180,7 +180,7 @@ impl<'a> Checker<'a> {
                 expr.tp = succ.tp.clone();
             }
             ExprKind::Id(ref mut bind) => {
-                expr.tp = self.locals[bind.path.index].tp.clone();
+                expr.tp = self.locals[bind.path.index()].tp.clone();
             }
             ExprKind::Int(_) => {
                 expr.tp = self.store.type_int.clone();

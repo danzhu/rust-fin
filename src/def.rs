@@ -81,8 +81,7 @@ macro_rules! define_tp {
         let kind = TypeDefKind::Builtin(BuiltinType::$name);
         let tp = TypeDef::new(stringify!($name), kind);
         let idx = $store.define_type(tp);
-        let mut path = Path::new(stringify!($name));
-        path.index = idx;
+        let path = Path::Resolved(idx);
         $store.$def = idx;
         $store.$type = Type::new(TypeKind::Named { path });
     }}
@@ -137,8 +136,8 @@ impl Store {
         store
     }
 
-    pub fn get_sym(&self, path: &Path) -> Option<Symbol> {
-        self.sym_table.get(&path.name).cloned()
+    pub fn get_sym(&self, segs: &Segs) -> Option<Symbol> {
+        self.sym_table.get(&segs.name).cloned()
     }
 
     pub fn define(&mut self, src: Source) {

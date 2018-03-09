@@ -98,7 +98,7 @@ fn alloc_values(store: &Store, func: &FuncDef) -> Vec<BlockValues> {
                     | StmtKind::Member { .. } => Value::Local(i, j),
                     StmtKind::Construct { ref tp, .. } => {
                         // TODO: remove the need to check fields for value allocation
-                        let def = &store.type_defs[tp.path().index];
+                        let def = &store.type_defs[tp.path().index()];
                         match def.kind {
                             TypeDefKind::Struct { ref fields, .. } => if fields.is_empty() {
                                 Value::Undefined
@@ -152,7 +152,7 @@ where
 fn type_name(store: &Store, tp: &Type) -> Value {
     match tp.kind {
         TypeKind::Named { ref path } => {
-            let def = &store.type_defs[path.index];
+            let def = &store.type_defs[path.index()];
             typedef_name(def)
         }
         TypeKind::Void => Value::Builtin("void"),
@@ -305,7 +305,7 @@ where
             StmtKind::Call { ref func, ref args } => {
                 let tp = type_name(self.store, &stmt.tp);
 
-                let func = &self.store.func_defs[func.path.index];
+                let func = &self.store.func_defs[func.path.index()];
                 let name = funcdef_name(func);
 
                 write!(self.output, "{}{} = call {} {}(", INDENT, val, tp, name)?;
@@ -329,7 +329,7 @@ where
             StmtKind::Member { value, ref mem } => {
                 let tp = self.reg_type(value);
                 let value = self.reg(value);
-                let idx = mem.path.index.value();
+                let idx = mem.path.index().value();
 
                 writeln!(
                     self.output,

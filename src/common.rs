@@ -73,9 +73,15 @@ pub struct Bind {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct Path {
+pub enum Path {
+    Unresolved(Segs),
+    Resolved(Index),
+}
+
+// TODO: remove Eq and add custom impl for Path
+#[derive(Clone, PartialEq, Eq)]
+pub struct Segs {
     pub name: String,
-    pub index: Index,
 }
 
 impl fmt::Debug for Op {
@@ -242,19 +248,34 @@ impl Path {
     where
         Str: Into<String>,
     {
-        Self {
-            name: name.into(),
-            index: Index::UNKNOWN,
+        Path::Unresolved(Segs { name: name.into() })
+    }
+
+    pub fn name(&self) -> &String {
+        &self.segs().name
+    }
+
+    pub fn segs(&self) -> &Segs {
+        match *self {
+            Path::Unresolved(ref segs) => segs,
+            Path::Resolved(_) => panic!("calling segs on resolved path"),
+        }
+    }
+
+    pub fn index(&self) -> Index {
+        match *self {
+            Path::Unresolved(_) => panic!("calling index on unresolved path"),
+            Path::Resolved(idx) => idx,
         }
     }
 }
 
+// TODO: change to Debug
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.name)?;
-        if self.index != Index::UNKNOWN {
-            write!(f, "[{:?}]", self.index)?;
+        match *self {
+            Path::Unresolved(ref segs) => write!(f, "{:?}", segs.name),
+            Path::Resolved(idx) => write!(f, "{:?}", idx),
         }
-        Ok(())
     }
 }
