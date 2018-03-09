@@ -34,7 +34,7 @@ pub enum StmtKind {
 #[derive(Clone)]
 pub enum Term {
     Br { cond: Reg, succ: Index, fail: Index },
-    Goto(Index),
+    Jump(Index),
     Ret(Option<Reg>),
     Unreachable,
 }
@@ -152,7 +152,7 @@ impl fmt::Debug for Term {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Term::Br { cond, succ, fail } => write!(f, "Br {:?} {:?} {:?}", cond, succ, fail),
-            Term::Goto(block) => write!(f, "Goto {:?}", block),
+            Term::Jump(block) => write!(f, "Jump {:?}", block),
             Term::Ret(Some(reg)) => write!(f, "Ret {:?}", reg),
             Term::Ret(None) => write!(f, "Ret"),
             Term::Unreachable => write!(f, "Unreachable"),

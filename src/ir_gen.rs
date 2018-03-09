@@ -97,10 +97,10 @@ impl Generator {
                 );
 
                 let succ = self.gen(succ, &mut succ_block).unwrap();
-                self.ir.end(succ_block, Term::Goto(end_block));
+                self.ir.end(succ_block, Term::Jump(end_block));
 
                 let fail = self.gen(fail, &mut fail_block).unwrap();
-                self.ir.end(fail_block, Term::Goto(end_block));
+                self.ir.end(fail_block, Term::Jump(end_block));
 
                 *block = end_block;
                 StmtKind::Phi {

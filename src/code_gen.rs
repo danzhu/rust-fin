@@ -367,7 +367,7 @@ where
                     INDENT, tp, cond, succ, fail
                 )?;
             }
-            Term::Goto(tar) => {
+            Term::Jump(tar) => {
                 let tar = self.label(tar);
 
                 writeln!(self.output, "{}br label {}", INDENT, tar)?;
