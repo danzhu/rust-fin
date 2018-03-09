@@ -67,6 +67,13 @@ impl<'a> Generator<'a> {
                     args,
                 }
             }
+            ExprKind::Member { ref value, ref mem } => {
+                let value = self.gen(value, block)?;
+                StmtKind::Member {
+                    value,
+                    mem: mem.clone(),
+                }
+            }
             ExprKind::Binary {
                 op,
                 ref left,

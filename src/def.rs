@@ -40,7 +40,10 @@ pub struct TypeDef {
 
 #[derive(Clone)]
 pub enum TypeDefKind {
-    Struct { fields: Vec<BindDef> },
+    Struct {
+        fields: Vec<BindDef>,
+        sym_table: HashMap<String, Index>,
+    },
     Int,
     Bool,
 }
@@ -196,7 +199,7 @@ impl fmt::Debug for TypeDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Type {}", self.name)?;
         match self.kind {
-            TypeDefKind::Struct { ref fields } => {
+            TypeDefKind::Struct { ref fields, .. } => {
                 writeln!(f, "Struct")?;
                 for field in fields {
                     writeln!(f, "{}{:?}", INDENT, field)?;

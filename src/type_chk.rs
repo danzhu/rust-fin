@@ -13,6 +13,7 @@ pub enum Error {
     ArgCount { expect: usize, got: usize },
     TypeMismatch { expect: Type, got: Type },
     ConstructPrimitive { tp: Type },
+    MemberNotFound { tp: Type, mem: Member },
 }
 
 pub type Result = result::Result<(), Error>;
@@ -77,9 +78,9 @@ impl<'a> Checker<'a> {
 
                 let def = &self.store.type_defs[path.index];
                 let fields = match def.kind {
-                    TypeDefKind::Struct { ref fields } => fields,
+                    TypeDefKind::Struct { ref fields, .. } => fields,
                     TypeDefKind::Int | TypeDefKind::Bool => {
-                        return Err(Error::ConstructPrimitive { tp: tp.clone() })
+                        return Err(Error::ConstructPrimitive { tp: tp.clone() });
                     }
                 };
 
@@ -118,6 +119,38 @@ impl<'a> Checker<'a> {
                 }
 
                 expr.tp = def.ret.clone();
+            }
+            ExprKind::Member {
+                ref mut value,
+                ref mut mem,
+            } => {
+                self.check(value)?;
+
+                let def = &self.store.type_defs[value.tp.path().index];
+                match def.kind {
+                    TypeDefKind::Struct {
+                        ref fields,
+                        ref sym_table,
+                    } => {
+                        let idx = match sym_table.get(&mem.path.name) {
+                            Some(&idx) => idx,
+                            None => {
+                                return Err(Error::MemberNotFound {
+                                    tp: value.tp.clone(),
+                                    mem: mem.clone(),
+                                })
+                            }
+                        };
+                        mem.path.index = idx;
+                        expr.tp = fields[idx.value()].tp.clone();
+                    }
+                    TypeDefKind::Int | TypeDefKind::Bool => {
+                        return Err(Error::MemberNotFound {
+                            tp: value.tp.clone(),
+                            mem: mem.clone(),
+                        });
+                    }
+                }
             }
             ExprKind::Binary {
                 op,
@@ -172,6 +205,9 @@ impl fmt::Display for Error {
             } => write!(f, "expect type {:?}, got {:?}", expect, got),
             Error::ConstructPrimitive { ref tp } => {
                 write!(f, "attempt to construct primitive type {:?}", tp)
+            }
+            Error::MemberNotFound { ref tp, ref mem } => {
+                write!(f, "type {:?} doesn't have member {:?}", tp, mem)
             }
         }
     }

@@ -63,6 +63,11 @@ pub struct Func {
 }
 
 #[derive(Clone)]
+pub struct Member {
+    pub path: Path,
+}
+
+#[derive(Clone)]
 pub struct Bind {
     pub path: Path,
 }
@@ -203,6 +208,18 @@ impl Func {
 }
 
 impl fmt::Debug for Func {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.path)
+    }
+}
+
+impl Member {
+    pub fn new(path: Path) -> Self {
+        Self { path }
+    }
+}
+
+impl fmt::Debug for Member {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.path)
     }

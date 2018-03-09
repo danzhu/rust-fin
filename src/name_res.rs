@@ -47,7 +47,7 @@ pub fn resolve_decls(store: &mut Store) -> Result {
         let refs = &store;
         for tp in &mut type_defs {
             match tp.kind {
-                TypeDefKind::Struct { ref mut fields } => for field in fields {
+                TypeDefKind::Struct { ref mut fields, .. } => for field in fields {
                     resolve_type(&mut field.tp, refs)?;
                 },
                 TypeDefKind::Int | TypeDefKind::Bool => {}
@@ -66,12 +66,28 @@ pub fn resolve_decls(store: &mut Store) -> Result {
 }
 
 pub fn resolve_defs(store: &mut Store) -> Result {
+    let mut type_defs = store.type_defs.clone();
     let mut func_defs = store.func_defs.clone();
+
+    for tp in &mut type_defs {
+        match tp.kind {
+            TypeDefKind::Struct {
+                ref fields,
+                ref mut sym_table,
+            } => for (i, field) in fields.iter().enumerate() {
+                sym_table.insert(field.name.clone(), Index::new(i));
+            },
+            TypeDefKind::Int | TypeDefKind::Bool => {}
+        }
+    }
+
     for func in &mut func_defs {
         let mut res = Resolver::new(store);
         res.resolve(func)?;
         func.locals = res.locals;
     }
+
+    store.type_defs = type_defs;
     store.func_defs = func_defs;
     Ok(())
 }
@@ -145,6 +161,9 @@ impl<'a> Resolver<'a> {
                 for arg in args {
                     self.resolve_expr(arg, syms)?;
                 }
+            }
+            ExprKind::Member { ref mut value, .. } => {
+                self.resolve_expr(value, syms)?;
             }
             ExprKind::Binary {
                 ref mut left,

@@ -25,6 +25,7 @@ pub enum StmtKind {
     Binary { op: Op, left: Reg, right: Reg },
     Construct { tp: Type, args: Vec<Reg> },
     Call { func: Func, args: Vec<Reg> },
+    Member { value: Reg, mem: Member },
     Param(Index),
     Int(i32),
 }
@@ -129,6 +130,9 @@ impl fmt::Debug for Stmt {
                 for arg in args {
                     write!(f, " {:?}", arg)?;
                 }
+            }
+            StmtKind::Member { ref value, ref mem } => {
+                write!(f, "Member {:?} {:?}", value, mem)?;
             }
             StmtKind::Param(idx) => {
                 write!(f, "Param {:?}", idx)?;

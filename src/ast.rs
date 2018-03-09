@@ -25,6 +25,10 @@ pub enum ExprKind {
         func: Func,
         args: Vec<Expr>,
     },
+    Member {
+        value: Box<Expr>,
+        mem: Member,
+    },
     Binary {
         op: Op,
         left: Box<Expr>,
@@ -56,15 +60,14 @@ impl Expr {
             ExprKind::Block { ref stmts } => for stmt in stmts {
                 act(stmt)?;
             },
-            ExprKind::Let { ref value, .. } => {
+            ExprKind::Let { ref value, .. } | ExprKind::Member { ref value, .. } => {
                 act(value)?;
             }
-            ExprKind::Construct { ref args, .. } => for arg in args {
-                act(arg)?;
-            },
-            ExprKind::Function { ref args, .. } => for arg in args {
-                act(arg)?;
-            },
+            ExprKind::Construct { ref args, .. } | ExprKind::Function { ref args, .. } => {
+                for arg in args {
+                    act(arg)?;
+                }
+            }
             ExprKind::Binary {
                 ref left,
                 ref right,
@@ -101,6 +104,9 @@ impl Expr {
             }
             ExprKind::Function { ref func, .. } => {
                 write!(f, "Function {:?}", func)?;
+            }
+            ExprKind::Member { ref mem, .. } => {
+                write!(f, "Member {:?}", mem)?;
             }
             ExprKind::Binary { ref op, .. } => {
                 write!(f, "Binary {:?}", op)?;

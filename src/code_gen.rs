@@ -92,17 +92,18 @@ fn alloc_values(store: &Store, func: &FuncDef) -> Vec<BlockValues> {
                 .iter()
                 .enumerate()
                 .map(|(j, stmt)| match stmt.kind {
-                    StmtKind::Phi { .. } | StmtKind::Binary { .. } | StmtKind::Call { .. } => {
-                        Value::Local(i, j)
-                    }
+                    StmtKind::Phi { .. }
+                    | StmtKind::Binary { .. }
+                    | StmtKind::Call { .. }
+                    | StmtKind::Member { .. } => Value::Local(i, j),
                     StmtKind::Construct { ref tp, .. } => {
                         // TODO: remove the need to check fields for value allocation
                         let def = &store.type_defs[tp.path().index];
                         match def.kind {
-                            TypeDefKind::Struct { ref fields } => if fields.len() != 0 {
-                                Value::Local(i, j)
-                            } else {
+                            TypeDefKind::Struct { ref fields, .. } => if fields.is_empty() {
                                 Value::Undefined
+                            } else {
+                                Value::Local(i, j)
                             },
                             TypeDefKind::Int | TypeDefKind::Bool => {
                                 panic!("constructing primtive type")
@@ -127,7 +128,7 @@ where
 {
     writeln!(output, "; Type {}", tp.name)?;
     match tp.kind {
-        TypeDefKind::Struct { ref fields } => {
+        TypeDefKind::Struct { ref fields, .. } => {
             let name = typedef_name(tp);
 
             write!(output, "{} = type {{ ", name)?;
@@ -324,6 +325,17 @@ where
                 }
 
                 writeln!(self.output, ")")?;
+            }
+            StmtKind::Member { value, ref mem } => {
+                let tp = self.reg_type(value);
+                let value = self.reg(value);
+                let idx = mem.path.index.value();
+
+                writeln!(
+                    self.output,
+                    "{}{} = extractvalue {} {}, {}",
+                    INDENT, val, tp, value, idx
+                )?;
             }
             StmtKind::Param(_) | StmtKind::Int(_) => {}
         }

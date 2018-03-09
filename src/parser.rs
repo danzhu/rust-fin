@@ -1,4 +1,5 @@
 use std::{fmt, iter, result};
+use std::collections::HashMap;
 
 use common::*;
 use token::*;
@@ -78,7 +79,13 @@ impl<T: Iterator<Item = Token>> Parser<T> {
 
         expect_token!(self, TokenKind::Period);
 
-        Ok(TypeDef::new(name, TypeDefKind::Struct { fields }))
+        Ok(TypeDef::new(
+            name,
+            TypeDefKind::Struct {
+                fields,
+                sym_table: HashMap::new(),
+            },
+        ))
     }
 
     fn func(&mut self) -> Result<FuncDef> {
@@ -162,7 +169,7 @@ impl<T: Iterator<Item = Token>> Parser<T> {
     }
 
     fn term(&mut self) -> Result<Expr> {
-        if let Some(&TokenKind::Quote) = self.peek() {
+        let mut expr = if let Some(&TokenKind::Quote) = self.peek() {
             self.next();
             let kind = match self.next() {
                 Some(TokenKind::Id(name)) => {
@@ -183,12 +190,21 @@ impl<T: Iterator<Item = Token>> Parser<T> {
                 }
                 got => return Err(Error::Expect("type or function", got)),
             };
-            Ok(Expr::new(kind))
+            Expr::new(kind)
         } else {
-            self.factor()
+            self.factor()?
+        };
+
+        while let Some(&TokenKind::Quote) = self.peek() {
+            self.next();
+            let name = expect_token!(self, TokenKind::Id(name), name);
+            expr = Expr::new(ExprKind::Member {
+                value: Box::new(expr),
+                mem: Member::new(Path::new(name)),
+            });
         }
 
-        // TODO: method
+        Ok(expr)
     }
 
     fn args(&mut self) -> Result<Vec<Expr>> {
