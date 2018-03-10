@@ -3,13 +3,14 @@ use std::{fmt, io, result};
 use common::*;
 use ir::*;
 use def::*;
+use ctx::*;
 
 struct FuncGen<'a, Out>
 where
     Out: 'a + io::Write,
 {
     output: &'a mut Out,
-    store: &'a Store,
+    ctx: &'a Context,
     func: &'a FuncDef,
     blocks: &'a Vec<BlockValues>,
     temp: usize,
@@ -45,33 +46,33 @@ pub enum Error {
 
 pub type Result<T> = result::Result<T, Error>;
 
-pub fn generate<Out>(store: &Store, mut output: Out) -> Result<()>
+pub fn generate<Out>(ctx: &Context, mut output: Out) -> Result<()>
 where
     Out: io::Write,
 {
     let mut first = true;
-    for tp in &store.type_defs {
+    for tp in &ctx.type_defs {
         if first {
             first = false;
         } else {
             writeln!(&mut output)?;
         }
 
-        gen_type(store, tp, &mut output)?;
+        gen_type(ctx, tp, &mut output)?;
     }
 
-    for func in &store.func_defs {
+    for func in &ctx.func_defs {
         if first {
             first = false;
         } else {
             writeln!(&mut output)?;
         }
 
-        let blocks = alloc_values(store, func);
+        let blocks = alloc_values(ctx, func);
 
         let mut gen = FuncGen {
             output: &mut output,
-            store,
+            ctx,
             func,
             blocks: &blocks,
             temp: 0,
@@ -81,7 +82,7 @@ where
     Ok(())
 }
 
-fn alloc_values(store: &Store, func: &FuncDef) -> Vec<BlockValues> {
+fn alloc_values(ctx: &Context, func: &FuncDef) -> Vec<BlockValues> {
     func.ir
         .blocks
         .iter()
@@ -105,7 +106,7 @@ fn alloc_values(store: &Store, func: &FuncDef) -> Vec<BlockValues> {
                     }
                     StmtKind::Construct { ref tp, .. } => {
                         // TODO: remove the need to check fields for value allocation
-                        let def = &store.type_defs[tp.path().index()];
+                        let def = &ctx.type_defs[tp.path().index()];
                         match def.kind {
                             TypeDefKind::Struct { ref fields, .. } => if fields.is_empty() {
                                 Value::Undefined
@@ -127,7 +128,7 @@ fn alloc_values(store: &Store, func: &FuncDef) -> Vec<BlockValues> {
         .collect()
 }
 
-fn gen_type<Out>(store: &Store, tp: &TypeDef, output: &mut Out) -> Result<()>
+fn gen_type<Out>(ctx: &Context, tp: &TypeDef, output: &mut Out) -> Result<()>
 where
     Out: io::Write,
 {
@@ -146,7 +147,7 @@ where
                     write!(output, ", ")?;
                 }
 
-                write!(output, "{}", type_name(store, &field.tp))?;
+                write!(output, "{}", type_name(ctx, &field.tp))?;
             }
 
             writeln!(output, " }}")?;
@@ -156,10 +157,10 @@ where
     Ok(())
 }
 
-fn type_name(store: &Store, tp: &Type) -> Value {
+fn type_name(ctx: &Context, tp: &Type) -> Value {
     match tp.kind {
         TypeKind::Named { ref path } => {
-            let def = &store.type_defs[path.index()];
+            let def = &ctx.type_defs[path.index()];
             typedef_name(def)
         }
         TypeKind::Void => Value::Builtin("void"),
@@ -191,7 +192,7 @@ where
 {
     fn gen(&mut self) -> Result<()> {
         let name = funcdef_name(self.func);
-        let ret = type_name(self.store, &self.func.ret);
+        let ret = type_name(self.ctx, &self.func.ret);
 
         writeln!(self.output, "; Func {}", self.func.name)?;
         write!(self.output, "define {} {}(", ret, name)?;
@@ -204,7 +205,7 @@ where
                 write!(self.output, ", ")?;
             }
 
-            let tp = type_name(self.store, &param.tp);
+            let tp = type_name(self.ctx, &param.tp);
             let param = param_name(param);
             write!(self.output, "{} {}", tp, param)?;
         }
@@ -239,7 +240,7 @@ where
     fn gen_stmt(&mut self, stmt: &Stmt, val: &Value) -> Result<()> {
         match stmt.kind {
             StmtKind::Phi { ref values } => {
-                let tp = type_name(self.store, &stmt.tp);
+                let tp = type_name(self.ctx, &stmt.tp);
 
                 write!(self.output, "{}{} = phi {} ", INDENT, val, tp)?;
 
@@ -289,7 +290,7 @@ where
                 )?;
             }
             StmtKind::Construct { ref tp, ref args } => {
-                let tp = type_name(self.store, tp);
+                let tp = type_name(self.ctx, tp);
 
                 let last = args.len() - 1;
                 let mut tmp_val = Value::Undefined;
@@ -310,9 +311,9 @@ where
                 }
             }
             StmtKind::Call { ref func, ref args } => {
-                let tp = type_name(self.store, &stmt.tp);
+                let tp = type_name(self.ctx, &stmt.tp);
 
-                let func = &self.store.func_defs[func.path.index()];
+                let func = &self.ctx.func_defs[func.path.index()];
                 let name = funcdef_name(func);
 
                 if stmt.tp.kind == TypeKind::Void {
@@ -403,7 +404,7 @@ where
     }
 
     fn reg_type(&self, reg: Reg) -> Value {
-        type_name(self.store, &self.func.ir.get(reg).tp)
+        type_name(self.ctx, &self.func.ir.get(reg).tp)
     }
 }
 

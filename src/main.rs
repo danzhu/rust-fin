@@ -3,6 +3,7 @@ mod token;
 mod ast;
 mod ir;
 mod def;
+mod ctx;
 
 mod lexer;
 mod parser;

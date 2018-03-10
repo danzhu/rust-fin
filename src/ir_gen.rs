@@ -1,14 +1,14 @@
 use common::*;
 use ast::*;
 use ir::*;
-use def::*;
+use ctx::*;
 
 struct Generator {
     ir: Ir,
 }
 
-pub fn generate(store: &mut Store) {
-    for func in &mut store.func_defs {
+pub fn generate(ctx: &mut Context) {
+    for func in &mut ctx.func_defs {
         let mut gen = Generator { ir: Ir::new() };
 
         // entry block and params

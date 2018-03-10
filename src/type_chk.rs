@@ -3,9 +3,10 @@ use std::{fmt, result};
 use common::*;
 use ast::*;
 use def::*;
+use ctx::*;
 
 struct Checker<'a> {
-    store: &'a Store,
+    ctx: &'a Context,
     locals: &'a mut List<BindDef>,
 }
 
@@ -23,14 +24,14 @@ pub enum ErrorKind {
 
 pub type Result = result::Result<(), Error>;
 
-pub fn type_check(store: &mut Store) -> Result {
-    let mut func_defs = store.func_defs.clone();
+pub fn type_check(ctx: &mut Context) -> Result {
+    let mut func_defs = ctx.func_defs.clone();
     for func in &mut func_defs {
-        let mut chk = Checker::new(store, &mut func.locals);
+        let mut chk = Checker::new(ctx, &mut func.locals);
         chk.check(&mut func.body)?;
         expect_tp(&func.ret, &func.body.tp, func.span)?;
     }
-    store.func_defs = func_defs;
+    ctx.func_defs = func_defs;
     Ok(())
 }
 
@@ -49,8 +50,8 @@ fn expect_tp(expect: &Type, got: &Type, span: Span) -> Result {
 }
 
 impl<'a> Checker<'a> {
-    fn new(store: &'a Store, locals: &'a mut List<BindDef>) -> Self {
-        Self { store, locals }
+    fn new(ctx: &'a Context, locals: &'a mut List<BindDef>) -> Self {
+        Self { ctx, locals }
     }
 
     fn check(&mut self, expr: &mut Expr) -> Result {
@@ -84,7 +85,7 @@ impl<'a> Checker<'a> {
                     _ => panic!("construction of non-named type"),
                 };
 
-                let def = &self.store.type_defs[path.index()];
+                let def = &self.ctx.type_defs[path.index()];
                 let fields = match def.kind {
                     TypeDefKind::Struct { ref fields, .. } => fields,
                     TypeDefKind::Builtin(_) => {
@@ -117,7 +118,7 @@ impl<'a> Checker<'a> {
                 ref mut func,
                 ref mut args,
             } => {
-                let def = &self.store.func_defs[func.path.index()];
+                let def = &self.ctx.func_defs[func.path.index()];
 
                 if def.params.len() != args.len() {
                     return Err(Error {
@@ -143,7 +144,7 @@ impl<'a> Checker<'a> {
             } => {
                 self.check(value)?;
 
-                let def = &self.store.type_defs[value.tp.path().index()];
+                let def = &self.ctx.type_defs[value.tp.path().index()];
                 match def.kind {
                     TypeDefKind::Struct {
                         ref fields,
@@ -186,7 +187,7 @@ impl<'a> Checker<'a> {
                 expect_tp(&left.tp, &right.tp, expr.span)?;
                 expr.tp = match op {
                     Op::Arith(_) => left.tp.clone(),
-                    Op::Comp(_) => self.store.type_bool.clone(),
+                    Op::Comp(_) => self.ctx.type_bool.clone(),
                 };
             }
             ExprKind::If {
@@ -198,7 +199,7 @@ impl<'a> Checker<'a> {
                 self.check(succ)?;
                 self.check(fail)?;
 
-                expect_tp(&self.store.type_bool, &cond.tp, expr.span)?;
+                expect_tp(&self.ctx.type_bool, &cond.tp, expr.span)?;
                 expect_tp(&succ.tp, &fail.tp, expr.span)?;
                 expr.tp = succ.tp.clone();
             }
@@ -206,7 +207,7 @@ impl<'a> Checker<'a> {
                 expr.tp = self.locals[bind.path.index()].tp.clone();
             }
             ExprKind::Int(_) => {
-                expr.tp = self.store.type_int.clone();
+                expr.tp = self.ctx.type_int.clone();
             }
             ExprKind::Noop => {
                 expr.tp = Type::new(TypeKind::Void);

@@ -4,13 +4,14 @@ use std::collections::HashMap;
 use common::*;
 use ast::*;
 use def::*;
+use ctx::*;
 
 struct Resolver<'a> {
     refs: &'a RefTable,
     locals: List<BindDef>,
 }
 
-type RefTable = Store;
+type RefTable = Context;
 
 struct SymTable<'a> {
     symbols: HashMap<String, Index>,
@@ -19,7 +20,7 @@ struct SymTable<'a> {
 
 enum SymTableParent<'a> {
     Table(&'a SymTable<'a>),
-    Store(&'a Store),
+    Context(&'a Context),
 }
 
 pub struct Error {
@@ -35,11 +36,11 @@ pub enum ErrorKind {
 pub type Result = result::Result<(), Error>;
 
 macro_rules! resolve_path {
-    ($store:expr, $path:expr, $span:expr, $kind:ident) => {{
-        let store: &Store = $store;
+    ($ctx:expr, $path:expr, $span:expr, $kind:ident) => {{
+        let ctx: &Context = $ctx;
         let path: &mut Path = $path;
         let span: Span = $span;
-        *path = match store.get_sym(path.segs()) {
+        *path = match ctx.get_sym(path.segs()) {
             Some(Symbol::$kind(idx)) => Path::Resolved(idx),
             Some(sym) => return Err(Error{
                 kind: ErrorKind::WrongSymbolKind(stringify!($kind), sym),
@@ -53,11 +54,11 @@ macro_rules! resolve_path {
     }}
 }
 
-pub fn resolve_decls(store: &mut Store) -> Result {
-    let mut type_defs = store.type_defs.clone();
-    let mut func_defs = store.func_defs.clone();
+pub fn resolve_decls(ctx: &mut Context) -> Result {
+    let mut type_defs = ctx.type_defs.clone();
+    let mut func_defs = ctx.func_defs.clone();
     {
-        let refs = &store;
+        let refs = &ctx;
         for tp in &mut type_defs {
             match tp.kind {
                 TypeDefKind::Struct { ref mut fields, .. } => for field in fields {
@@ -74,14 +75,14 @@ pub fn resolve_decls(store: &mut Store) -> Result {
             resolve_type(&mut func.ret, func.span, refs)?;
         }
     }
-    store.type_defs = type_defs;
-    store.func_defs = func_defs;
+    ctx.type_defs = type_defs;
+    ctx.func_defs = func_defs;
     Ok(())
 }
 
-pub fn resolve_defs(store: &mut Store) -> Result {
-    let mut type_defs = store.type_defs.clone();
-    let mut func_defs = store.func_defs.clone();
+pub fn resolve_defs(ctx: &mut Context) -> Result {
+    let mut type_defs = ctx.type_defs.clone();
+    let mut func_defs = ctx.func_defs.clone();
 
     for tp in &mut type_defs {
         match tp.kind {
@@ -96,13 +97,13 @@ pub fn resolve_defs(store: &mut Store) -> Result {
     }
 
     for func in &mut func_defs {
-        let mut res = Resolver::new(store);
+        let mut res = Resolver::new(ctx);
         res.resolve(func)?;
         func.locals = res.locals;
     }
 
-    store.type_defs = type_defs;
-    store.func_defs = func_defs;
+    ctx.type_defs = type_defs;
+    ctx.func_defs = func_defs;
     Ok(())
 }
 
@@ -223,10 +224,10 @@ impl<'a> Resolver<'a> {
 }
 
 impl<'a> SymTable<'a> {
-    fn root(store: &'a Store) -> Self {
+    fn root(ctx: &'a Context) -> Self {
         SymTable {
             symbols: HashMap::new(),
-            parent: SymTableParent::Store(store),
+            parent: SymTableParent::Context(ctx),
         }
     }
 
@@ -245,7 +246,7 @@ impl<'a> SymTable<'a> {
         match (self.symbols.get(name), &self.parent) {
             (Some(&idx), _) => Some(idx),
             (None, &SymTableParent::Table(parent)) => parent.get(name),
-            (None, &SymTableParent::Store(_)) => None,
+            (None, &SymTableParent::Context(_)) => None,
         }
     }
 }

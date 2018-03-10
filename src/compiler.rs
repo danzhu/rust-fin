@@ -1,6 +1,6 @@
 use std::{fmt, io, result};
 
-use def::Store;
+use ctx::*;
 
 use lexer;
 use parser;
@@ -10,7 +10,7 @@ use ir_gen;
 use code_gen;
 
 pub struct Compiler {
-    store: Store,
+    ctx: Context,
 }
 
 pub enum Error {
@@ -68,7 +68,7 @@ impl fmt::Display for Error {
 impl Compiler {
     pub fn new() -> Self {
         Self {
-            store: Store::new(),
+            ctx: Context::new(),
         }
     }
 
@@ -79,15 +79,15 @@ impl Compiler {
     {
         let tokens = lexer::lex(input)?;
         let source = parser::parse(tokens.into_iter())?;
-        self.store.define(source);
-        name_res::resolve_decls(&mut self.store)?;
-        name_res::resolve_defs(&mut self.store)?;
-        type_chk::type_check(&mut self.store)?;
-        ir_gen::generate(&mut self.store);
+        self.ctx.define(source);
+        name_res::resolve_decls(&mut self.ctx)?;
+        name_res::resolve_defs(&mut self.ctx)?;
+        type_chk::type_check(&mut self.ctx)?;
+        ir_gen::generate(&mut self.ctx);
 
-        eprint!("{:?}", self.store);
+        eprint!("{:?}", self.ctx);
 
-        code_gen::generate(&self.store, output)?;
+        code_gen::generate(&self.ctx, output)?;
 
         Ok(())
     }
