@@ -9,7 +9,12 @@ struct Checker<'a> {
     locals: &'a mut List<BindDef>,
 }
 
-pub enum Error {
+pub struct Error {
+    pub kind: ErrorKind,
+    pub span: Span,
+}
+
+pub enum ErrorKind {
     ArgCount { expect: usize, got: usize },
     TypeMismatch { expect: Type, got: Type },
     ConstructPrimitive { tp: Type },
@@ -23,19 +28,22 @@ pub fn type_check(store: &mut Store) -> Result {
     for func in &mut func_defs {
         let mut chk = Checker::new(store, &mut func.locals);
         chk.check(&mut func.body)?;
-        expect_tp(&func.ret, &func.body.tp)?;
+        expect_tp(&func.ret, &func.body.tp, func.span)?;
     }
     store.func_defs = func_defs;
     Ok(())
 }
 
-fn expect_tp(expect: &Type, got: &Type) -> Result {
+fn expect_tp(expect: &Type, got: &Type, span: Span) -> Result {
     if expect == got {
         Ok(())
     } else {
-        Err(Error::TypeMismatch {
-            expect: expect.clone(),
-            got: got.clone(),
+        Err(Error {
+            kind: ErrorKind::TypeMismatch {
+                expect: expect.clone(),
+                got: got.clone(),
+            },
+            span,
         })
     }
 }
@@ -80,21 +88,27 @@ impl<'a> Checker<'a> {
                 let fields = match def.kind {
                     TypeDefKind::Struct { ref fields, .. } => fields,
                     TypeDefKind::Builtin(_) => {
-                        return Err(Error::ConstructPrimitive { tp: tp.clone() });
+                        return Err(Error {
+                            kind: ErrorKind::ConstructPrimitive { tp: tp.clone() },
+                            span: expr.span,
+                        });
                     }
                 };
 
                 if fields.len() != args.len() {
-                    return Err(Error::ArgCount {
-                        expect: fields.len(),
-                        got: args.len(),
+                    return Err(Error {
+                        kind: ErrorKind::ArgCount {
+                            expect: fields.len(),
+                            got: args.len(),
+                        },
+                        span: expr.span,
                     });
                 }
 
                 for (field, arg) in fields.iter().zip(args) {
                     self.check(arg)?;
 
-                    expect_tp(&field.tp, &arg.tp)?;
+                    expect_tp(&field.tp, &arg.tp, arg.span)?;
                 }
 
                 expr.tp = tp.clone();
@@ -106,16 +120,19 @@ impl<'a> Checker<'a> {
                 let def = &self.store.func_defs[func.path.index()];
 
                 if def.params.len() != args.len() {
-                    return Err(Error::ArgCount {
-                        expect: def.params.len(),
-                        got: args.len(),
+                    return Err(Error {
+                        kind: ErrorKind::ArgCount {
+                            expect: def.params.len(),
+                            got: args.len(),
+                        },
+                        span: expr.span,
                     });
                 }
 
                 for (param, arg) in def.params.iter().zip(args) {
                     self.check(arg)?;
 
-                    expect_tp(&param.tp, &arg.tp)?;
+                    expect_tp(&param.tp, &arg.tp, arg.span)?;
                 }
 
                 expr.tp = def.ret.clone();
@@ -135,9 +152,12 @@ impl<'a> Checker<'a> {
                         let idx = match sym_table.get(mem.path.name()) {
                             Some(&idx) => idx,
                             None => {
-                                return Err(Error::MemberNotFound {
-                                    tp: value.tp.clone(),
-                                    mem: mem.clone(),
+                                return Err(Error {
+                                    kind: ErrorKind::MemberNotFound {
+                                        tp: value.tp.clone(),
+                                        mem: mem.clone(),
+                                    },
+                                    span: expr.span,
                                 })
                             }
                         };
@@ -145,9 +165,12 @@ impl<'a> Checker<'a> {
                         expr.tp = fields[idx.value()].tp.clone();
                     }
                     TypeDefKind::Builtin(_) => {
-                        return Err(Error::MemberNotFound {
-                            tp: value.tp.clone(),
-                            mem: mem.clone(),
+                        return Err(Error {
+                            kind: ErrorKind::MemberNotFound {
+                                tp: value.tp.clone(),
+                                mem: mem.clone(),
+                            },
+                            span: expr.span,
                         });
                     }
                 }
@@ -160,7 +183,7 @@ impl<'a> Checker<'a> {
                 self.check(left)?;
                 self.check(right)?;
 
-                expect_tp(&left.tp, &right.tp)?;
+                expect_tp(&left.tp, &right.tp, expr.span)?;
                 expr.tp = match op {
                     Op::Arith(_) => left.tp.clone(),
                     Op::Comp(_) => self.store.type_bool.clone(),
@@ -175,8 +198,8 @@ impl<'a> Checker<'a> {
                 self.check(succ)?;
                 self.check(fail)?;
 
-                expect_tp(&self.store.type_bool, &cond.tp)?;
-                expect_tp(&succ.tp, &fail.tp)?;
+                expect_tp(&self.store.type_bool, &cond.tp, expr.span)?;
+                expect_tp(&succ.tp, &fail.tp, expr.span)?;
                 expr.tp = succ.tp.clone();
             }
             ExprKind::Id(ref mut bind) => {
@@ -195,18 +218,19 @@ impl<'a> Checker<'a> {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::ArgCount { expect, got } => {
+        write!(f, "{}: error: ", self.span.start)?;
+        match self.kind {
+            ErrorKind::ArgCount { expect, got } => {
                 write!(f, "expect {} arguments, got {}", expect, got)
             }
-            Error::TypeMismatch {
+            ErrorKind::TypeMismatch {
                 ref expect,
                 ref got,
             } => write!(f, "expect type {:?}, got {:?}", expect, got),
-            Error::ConstructPrimitive { ref tp } => {
+            ErrorKind::ConstructPrimitive { ref tp } => {
                 write!(f, "attempt to construct primitive type {:?}", tp)
             }
-            Error::MemberNotFound { ref tp, ref mem } => {
+            ErrorKind::MemberNotFound { ref tp, ref mem } => {
                 write!(f, "type {:?} doesn't have member {:?}", tp, mem)
             }
         }
