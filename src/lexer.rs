@@ -165,11 +165,9 @@ where
         };
 
         let end = self.pos;
+        let span = Span::new(start, end);
 
-        Some(Ok(Token {
-            span: Span { start, end },
-            kind,
-        }))
+        Some(Ok(Token::new(kind, span)))
     }
 }
 

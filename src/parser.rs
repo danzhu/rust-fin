@@ -61,31 +61,6 @@ where
 }
 
 impl<Iter: Iterator<Item = Token>> Parser<Iter> {
-    fn next(&mut self) -> Option<TokenKind> {
-        self.source.next().map(|Token { kind, span }| {
-            self.span = span;
-            kind
-        })
-    }
-
-    fn peek(&mut self) -> Option<&TokenKind> {
-        self.source.peek().map(|token| &token.kind)
-    }
-
-    fn error<T>(&self, kind: ErrorKind) -> Result<T> {
-        Err(Error {
-            kind,
-            span: self.span,
-        })
-    }
-
-    fn tp(&mut self) -> Result<Type> {
-        let name = expect_value!(self, Type);
-        Ok(Type::new(TypeKind::Named {
-            path: Path::new(name),
-        }))
-    }
-
     fn module(&mut self) -> Result<Source> {
         let mut src = Source::new();
         while self.peek().is_some() {
@@ -162,6 +137,8 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     }
 
     fn block(&mut self) -> Result<Expr> {
+        let start = self.start_expr();
+
         let stmt = self.statement()?;
         if let Some(&TokenKind::Comma) = self.peek() {
             let mut stmts = vec![stmt];
@@ -169,44 +146,59 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
                 self.next();
                 stmts.push(self.statement()?);
             }
-            Ok(Expr::new(ExprKind::Block { stmts }))
+
+            Ok(self.end_expr(start, ExprKind::Block { stmts }))
         } else {
             Ok(stmt)
         }
     }
 
     fn statement(&mut self) -> Result<Expr> {
+        let start = self.start_expr();
+
         let expr = self.expr()?;
         if let Some(&TokenKind::Arrow) = self.peek() {
             self.next();
             // TODO: pattern
             expect!(self, Let);
             let var = expect_value!(self, Id);
-            Ok(Expr::new(ExprKind::Let {
-                value: Box::new(expr),
-                var: Bind::new(Path::new(var)),
-            }))
+
+            Ok(self.end_expr(
+                start,
+                ExprKind::Let {
+                    value: Box::new(expr),
+                    var: Bind::new(Path::new(var)),
+                },
+            ))
         } else {
             Ok(expr)
         }
     }
 
     fn expr(&mut self) -> Result<Expr> {
+        let start = self.start_expr();
+
         let mut expr = self.term()?;
         while let Some(&TokenKind::Operator(_)) = self.peek() {
             let op = expect_value!(self, Operator);
             let right = self.term()?;
-            expr = Expr::new(ExprKind::Binary {
-                op,
-                left: Box::new(expr),
-                right: Box::new(right),
-            });
+
+            expr = self.end_expr(
+                start,
+                ExprKind::Binary {
+                    op,
+                    left: Box::new(expr),
+                    right: Box::new(right),
+                },
+            );
         }
         Ok(expr)
     }
 
     fn term(&mut self) -> Result<Expr> {
         let mut expr = if let Some(&TokenKind::Quote) = self.peek() {
+            let start = self.start_expr();
+
             self.next();
             let kind = match self.next() {
                 Some(TokenKind::Id(name)) => {
@@ -232,18 +224,25 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
                     })
                 }
             };
-            Expr::new(kind)
+
+            self.end_expr(start, kind)
         } else {
             self.factor()?
         };
 
         while let Some(&TokenKind::Quote) = self.peek() {
+            let start = self.start_expr();
+
             self.next();
             let name = expect_value!(self, Id);
-            expr = Expr::new(ExprKind::Member {
-                value: Box::new(expr),
-                mem: Member::new(Path::new(name)),
-            });
+
+            expr = self.end_expr(
+                start,
+                ExprKind::Member {
+                    value: Box::new(expr),
+                    mem: Member::new(Path::new(name)),
+                },
+            );
         }
 
         Ok(expr)
@@ -267,6 +266,8 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     }
 
     fn factor(&mut self) -> Result<Expr> {
+        let start = self.start_expr();
+
         let kind = match self.next() {
             Some(TokenKind::Id(name)) => ExprKind::Id(Bind::new(Path::new(name))),
             Some(TokenKind::Int(val)) => ExprKind::Int(val),
@@ -280,15 +281,20 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
                 expect!(self, RParen);
                 return Ok(block);
             }
-            got => return self.error(ErrorKind::Expect {
-                expect: "value",
-                got,
-            }),
+            got => {
+                return self.error(ErrorKind::Expect {
+                    expect: "value",
+                    got,
+                })
+            }
         };
-        Ok(Expr::new(kind))
+
+        Ok(self.end_expr(start, kind))
     }
 
     fn cond(&mut self) -> Result<Expr> {
+        let start = self.start_expr();
+
         let cond = self.block()?;
 
         expect!(self, Then);
@@ -303,13 +309,58 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
                 self.next();
                 self.cond()?
             }
-            _ => Expr::new(ExprKind::Noop),
+            _ => {
+                let end = self.span.end;
+                Expr::new(ExprKind::Noop, Span::new(end, end))
+            }
         };
 
-        Ok(Expr::new(ExprKind::If {
-            cond: Box::new(cond),
-            succ: Box::new(succ),
-            fail: Box::new(fail),
+        Ok(self.end_expr(
+            start,
+            ExprKind::If {
+                cond: Box::new(cond),
+                succ: Box::new(succ),
+                fail: Box::new(fail),
+            },
+        ))
+    }
+
+    fn start_expr(&mut self) -> Option<Pos> {
+        self.source.peek().map(|token| token.span.start)
+    }
+
+    fn end_expr(&mut self, start: Option<Pos>, kind: ExprKind) -> Expr {
+        Expr::new(
+            kind,
+            Span {
+                start: start.expect("start pos for expr is none"),
+                end: self.span.end,
+            },
+        )
+    }
+
+    fn next(&mut self) -> Option<TokenKind> {
+        self.source.next().map(|Token { kind, span }| {
+            self.span = span;
+            kind
+        })
+    }
+
+    fn peek(&mut self) -> Option<&TokenKind> {
+        self.source.peek().map(|token| &token.kind)
+    }
+
+    fn error<T>(&self, kind: ErrorKind) -> Result<T> {
+        Err(Error {
+            kind,
+            span: self.span,
+        })
+    }
+
+    fn tp(&mut self) -> Result<Type> {
+        let name = expect_value!(self, Type);
+        Ok(Type::new(TypeKind::Named {
+            path: Path::new(name),
         }))
     }
 }

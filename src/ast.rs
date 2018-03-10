@@ -5,6 +5,7 @@ use common::*;
 #[derive(Clone)]
 pub struct Expr {
     pub kind: ExprKind,
+    pub span: Span,
     pub tp: Type,
 }
 
@@ -45,9 +46,10 @@ pub enum ExprKind {
 }
 
 impl Expr {
-    pub fn new(kind: ExprKind) -> Self {
+    pub fn new(kind: ExprKind, span: Span) -> Self {
         Self {
             kind,
+            span,
             tp: Type::new(TypeKind::Unknown),
         }
     }
@@ -125,7 +127,8 @@ impl Expr {
             }
         }
 
-        write!(f, " -> {:?}", self.tp)
+        write!(f, " -> {:?}", self.tp)?;
+        write!(f, " [{}]", self.span)
     }
 }
 

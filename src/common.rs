@@ -89,6 +89,16 @@ impl Span {
         start: Pos::ZERO,
         end: Pos::ZERO,
     };
+
+    pub fn new(start: Pos, end: Pos) -> Self {
+        Span { start, end }
+    }
+}
+
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} - {}", self.start, self.end)
+    }
 }
 
 impl Pos {
