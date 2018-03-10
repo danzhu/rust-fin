@@ -57,6 +57,7 @@ pub struct FuncDef {
     pub params: Vec<BindDef>,
     pub ret: Type,
     pub body: Expr,
+    pub span: Span,
     pub locals: List<BindDef>,
     pub ir: Ir,
 }
@@ -65,6 +66,7 @@ pub struct FuncDef {
 pub struct BindDef {
     pub name: String,
     pub tp: Type,
+    pub span: Span,
 }
 
 #[derive(Copy, Clone)]
@@ -220,7 +222,7 @@ impl fmt::Debug for BuiltinType {
     }
 }
 impl FuncDef {
-    pub fn new<Str>(name: Str, params: Vec<BindDef>, ret: Type, body: Expr) -> Self
+    pub fn new<Str>(name: Str, params: Vec<BindDef>, ret: Type, body: Expr, span: Span) -> Self
     where
         Str: Into<String>,
     {
@@ -229,6 +231,7 @@ impl FuncDef {
             params,
             ret,
             body,
+            span,
             locals: List::new(),
             ir: Ir::new(),
         }
@@ -253,11 +256,8 @@ impl fmt::Debug for FuncDef {
 }
 
 impl BindDef {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            tp: Type::new(TypeKind::Unknown),
-        }
+    pub fn new(name: String, tp: Type, span: Span) -> Self {
+        Self { name, tp, span }
     }
 }
 

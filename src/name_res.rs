@@ -22,7 +22,12 @@ enum SymTableParent<'a> {
     Store(&'a Store),
 }
 
-pub enum Error {
+pub struct Error {
+    pub kind: ErrorKind,
+    pub span: Span,
+}
+
+pub enum ErrorKind {
     SymbolNotFound(&'static str, Path),
     WrongSymbolKind(&'static str, Symbol),
 }
@@ -30,12 +35,20 @@ pub enum Error {
 pub type Result = result::Result<(), Error>;
 
 macro_rules! resolve_path {
-    ($store:expr, $path:expr, $kind:ident) => {{
+    ($store:expr, $path:expr, $span:expr, $kind:ident) => {{
+        let store: &Store = $store;
         let path: &mut Path = $path;
-        *path = match $store.get_sym(path.segs()) {
+        let span: Span = $span;
+        *path = match store.get_sym(path.segs()) {
             Some(Symbol::$kind(idx)) => Path::Resolved(idx),
-            Some(sym) => return Err(Error::WrongSymbolKind(stringify!($kind), sym)),
-            None => return Err(Error::SymbolNotFound(stringify!($kind), path.clone())),
+            Some(sym) => return Err(Error{
+                kind: ErrorKind::WrongSymbolKind(stringify!($kind), sym),
+                span,
+            }),
+            None => return Err(Error {
+                kind: ErrorKind::SymbolNotFound(stringify!($kind), path.clone()),
+                span,
+            }),
         };
     }}
 }
@@ -48,16 +61,17 @@ pub fn resolve_decls(store: &mut Store) -> Result {
         for tp in &mut type_defs {
             match tp.kind {
                 TypeDefKind::Struct { ref mut fields, .. } => for field in fields {
-                    resolve_type(&mut field.tp, refs)?;
+                    resolve_type(&mut field.tp, field.span, refs)?;
                 },
                 TypeDefKind::Builtin(_) => {}
             }
         }
         for func in &mut func_defs {
             for param in &mut func.params {
-                resolve_type(&mut param.tp, refs)?;
+                resolve_type(&mut param.tp, param.span, refs)?;
             }
-            resolve_type(&mut func.ret, refs)?;
+            // TODO: use span of return type, not function
+            resolve_type(&mut func.ret, func.span, refs)?;
         }
     }
     store.type_defs = type_defs;
@@ -92,18 +106,18 @@ pub fn resolve_defs(store: &mut Store) -> Result {
     Ok(())
 }
 
-fn resolve_type(tp: &mut Type, refs: &RefTable) -> Result {
+fn resolve_type(tp: &mut Type, span: Span, refs: &RefTable) -> Result {
     match tp.kind {
         TypeKind::Named { ref mut path } => {
-            resolve_path!(refs, path, Type);
+            resolve_path!(refs, path, span, Type);
         }
         TypeKind::Void | TypeKind::Unknown => {}
     }
     Ok(())
 }
 
-fn resolve_func(func: &mut Func, refs: &RefTable) -> Result {
-    resolve_path!(refs, &mut func.path, Func);
+fn resolve_func(func: &mut Func, span: Span, refs: &RefTable) -> Result {
+    resolve_path!(refs, &mut func.path, span, Func);
     Ok(())
 }
 
@@ -138,7 +152,8 @@ impl<'a> Resolver<'a> {
 
                 let idx = {
                     let name = var.path.name();
-                    let bind = BindDef::new(name.clone());
+                    let tp = Type::new(TypeKind::Unknown);
+                    let bind = BindDef::new(name.clone(), tp, expr.span);
                     let idx = self.locals.push(bind);
                     syms.add(name.clone(), idx);
                     idx
@@ -149,7 +164,7 @@ impl<'a> Resolver<'a> {
                 ref mut tp,
                 ref mut args,
             } => {
-                resolve_type(tp, self.refs)?;
+                resolve_type(tp, expr.span, self.refs)?;
 
                 for arg in args {
                     self.resolve_expr(arg, syms)?;
@@ -159,7 +174,7 @@ impl<'a> Resolver<'a> {
                 ref mut func,
                 ref mut args,
             } => {
-                resolve_func(func, self.refs)?;
+                resolve_func(func, expr.span, self.refs)?;
 
                 for arg in args {
                     self.resolve_expr(arg, syms)?;
@@ -190,8 +205,15 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(fail, &mut fail_syms)?;
             }
             ExprKind::Id(ref mut bind) => {
-                let idx = syms.get(bind.path.name())
-                    .ok_or_else(|| Error::SymbolNotFound("Id", bind.path.clone()))?;
+                let idx = match syms.get(bind.path.name()) {
+                    Some(idx) => idx,
+                    None => {
+                        return Err(Error {
+                            kind: ErrorKind::SymbolNotFound("Id", bind.path.clone()),
+                            span: expr.span,
+                        });
+                    }
+                };
                 bind.path = Path::Resolved(idx);
             }
             ExprKind::Int(_) | ExprKind::Noop => {}
@@ -230,11 +252,14 @@ impl<'a> SymTable<'a> {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::SymbolNotFound(exp, ref path) => {
-                write!(f, "{} symbol not found: '{}'", exp, path)
+        write!(f, "{}: error: ", self.span.start)?;
+        match self.kind {
+            ErrorKind::SymbolNotFound(exp, ref path) => {
+                write!(f, "{} symbol {} not found", exp, path)
             }
-            Error::WrongSymbolKind(exp, got) => write!(f, "expect {} symbol, got {:?}", exp, got),
+            ErrorKind::WrongSymbolKind(exp, got) => {
+                write!(f, "expect {} symbol, got {:?}", exp, got)
+            }
         }
     }
 }
