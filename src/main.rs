@@ -5,7 +5,6 @@ mod ir;
 mod def;
 mod ctx;
 
-mod lexer;
 mod parser;
 mod name_res;
 mod type_chk;

@@ -1,4 +1,4 @@
-use std::{io, iter, result};
+use std::{io, iter, num, result};
 use std::collections::HashMap;
 
 use common::*;
@@ -6,25 +6,6 @@ use token::*;
 use ast::*;
 use def::*;
 use ctx::*;
-
-struct Parser<Iter: Iterator<Item = Token>> {
-    source: iter::Peekable<Iter>,
-    span: Span,
-}
-
-pub struct Error {
-    pub kind: ErrorKind,
-    pub span: Span,
-}
-
-pub enum ErrorKind {
-    Expect {
-        expect: &'static str,
-        got: Option<TokenKind>,
-    },
-}
-
-pub type Result<T> = result::Result<T, Error>;
 
 macro_rules! expect {
     ($self:expr, $pat:ident) => {
@@ -50,16 +31,27 @@ macro_rules! expect_value {
     }
 }
 
-pub fn parse<Iter>(filename: &str, src: &str, tokens: Iter, ctx: &mut Context) -> Result<Source>
-where
-    Iter: IntoIterator<Item = Token>,
-{
+pub fn parse(filename: String, content: &str, ctx: &mut Context) -> Result<()> {
+    let src = Source::new(filename, content);
+    let idx = ctx.sources.push(src);
+
+    let lex = Lexer {
+        source: content.chars().peekable(),
+        pos: Pos {
+            file: idx,
+            line: 1,
+            column: 1,
+        },
+    };
+    let tokens = lex.collect::<Result<Vec<_>>>()?;
+
     let mut par = Parser {
         source: tokens.into_iter().peekable(),
-        span: Span::ZERO,
+        span: Span::zero(idx),
     };
 
-    let mut src = Source::new(filename, src);
+    let mut defs = Vec::new();
+
     while par.peek().is_some() {
         let kind = match par.next() {
             Some(TokenKind::Struct) => {
@@ -79,9 +71,153 @@ where
                 })
             }
         };
-        src.defs.push(Def::new(kind));
+        defs.push(Def::new(kind));
     }
-    Ok(src)
+
+    ctx.sources[idx].defs = defs;
+    Ok(())
+}
+
+struct Lexer<Iter>
+where
+    Iter: Iterator<Item = char>,
+{
+    source: iter::Peekable<Iter>,
+    pos: Pos,
+}
+
+impl<Iter> Lexer<Iter>
+where
+    Iter: Iterator<Item = char>,
+{
+    fn read(&mut self) -> Option<char> {
+        let ch = self.source.next();
+        match ch {
+            Some('\n') => {
+                self.pos.line += 1;
+                self.pos.column = 1;
+            }
+            Some(_) => {
+                self.pos.column += 1;
+            }
+            None => {}
+        }
+        ch
+    }
+
+    fn read_while<Pred>(&mut self, pred: Pred) -> String
+    where
+        Pred: Fn(char) -> bool,
+    {
+        let mut s = String::new();
+        loop {
+            match self.source.peek() {
+                Some(&c) if pred(c) => {
+                    self.read();
+                    s.push(c);
+                }
+                _ => break s,
+            }
+        }
+    }
+}
+
+impl<Iter> Iterator for Lexer<Iter>
+where
+    Iter: Iterator<Item = char>,
+{
+    type Item = Result<Token>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let ch = *self.source.peek()?;
+
+        // skip whitespace
+        if ch.is_whitespace() {
+            self.read();
+            return self.next();
+        }
+
+        // skip comments
+        if ch == '#' {
+            self.read();
+            loop {
+                match self.read() {
+                    Some('\n') | None => break,
+                    _ => {}
+                }
+            }
+            return self.next();
+        }
+
+        let start = self.pos;
+
+        let kind = if ch.is_alphabetic() {
+            // id
+            let id = self.read_while(|c| c.is_alphanumeric());
+
+            match id.as_ref() {
+                "def" => TokenKind::Def,
+                "struct" => TokenKind::Struct,
+                "as" => TokenKind::As,
+                "if" => TokenKind::If,
+                "then" => TokenKind::Then,
+                "elif" => TokenKind::Elif,
+                "else" => TokenKind::Else,
+                "let" => TokenKind::Let,
+                _ => if ch.is_lowercase() {
+                    TokenKind::Id(id)
+                } else {
+                    TokenKind::Type(id)
+                },
+            }
+        } else if ch.is_numeric() {
+            // int
+            let val = self.read_while(|c| c.is_numeric());
+            match val.parse() {
+                Ok(val) => TokenKind::Int(val),
+                Err(err) => return error(ErrorKind::ParseInt(err), Span::new(start, self.pos)),
+            }
+        } else {
+            self.read();
+            match ch {
+                '\'' => TokenKind::Quote,
+                '-' => if let Some(&'>') = self.source.peek() {
+                    self.read();
+                    TokenKind::Arrow
+                } else {
+                    TokenKind::Operator(Op::Arith(ArithOp::Sub))
+                },
+                '!' => if let Some(&'=') = self.source.peek() {
+                    self.read();
+                    TokenKind::Operator(Op::Comp(CompOp::Ne))
+                } else {
+                    TokenKind::Not
+                },
+                '+' => TokenKind::Operator(Op::Arith(ArithOp::Add)),
+                '*' => TokenKind::Operator(Op::Arith(ArithOp::Mul)),
+                '/' => TokenKind::Operator(Op::Arith(ArithOp::Div)),
+                '%' => TokenKind::Operator(Op::Arith(ArithOp::Mod)),
+                '=' => TokenKind::Operator(Op::Comp(CompOp::Eq)),
+                '<' => TokenKind::Operator(Op::Comp(CompOp::Lt)),
+                '>' => TokenKind::Operator(Op::Comp(CompOp::Gt)),
+                ',' => TokenKind::Comma,
+                '.' => TokenKind::Period,
+                '(' => TokenKind::LParen,
+                ')' => TokenKind::RParen,
+                _ => return error(ErrorKind::UnexpectedChar(ch), Span::new(start, self.pos)),
+            }
+        };
+
+        let end = self.pos;
+        let span = Span::new(start, end);
+
+        Some(Ok(Token::new(kind, span)))
+    }
+}
+
+struct Parser<Iter: Iterator<Item = Token>> {
+    source: iter::Peekable<Iter>,
+    span: Span,
 }
 
 impl<Iter: Iterator<Item = Token>> Parser<Iter> {
@@ -374,6 +510,11 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     }
 }
 
+pub struct Error {
+    pub kind: ErrorKind,
+    pub span: Span,
+}
+
 impl Error {
     pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
     where
@@ -381,17 +522,30 @@ impl Error {
     {
         write!(f, "{}: error: ", self.span.start.format(ctx))?;
         match self.kind {
+            ErrorKind::ParseInt(ref err) => write!(f, "{}", err),
+            ErrorKind::UnexpectedChar(ch) => write!(f, "unexpected character '{}'", ch),
             ErrorKind::Expect {
                 expect,
                 got: Some(ref got),
-            } => {
-                // TODO: make display for token
-                write!(f, "expect {}, but got {:?}", expect, got)?;
-            }
+            } => write!(f, "expect {}, but got {}", expect, got),
             ErrorKind::Expect { expect, got: None } => {
-                write!(f, "expect {}, but reached EOF", expect)?;
+                write!(f, "expect {}, but reached EOF", expect)
             }
         }
-        Ok(())
     }
+}
+
+pub enum ErrorKind {
+    ParseInt(num::ParseIntError),
+    UnexpectedChar(char),
+    Expect {
+        expect: &'static str,
+        got: Option<TokenKind>,
+    },
+}
+
+pub type Result<T> = result::Result<T, Error>;
+
+fn error<T>(kind: ErrorKind, span: Span) -> Option<Result<T>> {
+    Some(Err(Error { kind, span }))
 }

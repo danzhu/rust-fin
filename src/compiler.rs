@@ -2,7 +2,6 @@ use std::{io, result};
 
 use ctx::*;
 
-use lexer;
 use parser;
 use name_res;
 use type_chk;
@@ -15,7 +14,6 @@ pub struct Compiler {
 
 pub enum Error {
     Io(io::Error),
-    Lexer(lexer::Error),
     Parser(parser::Error),
     NameRes(name_res::Error),
     TypeChecker(type_chk::Error),
@@ -27,12 +25,6 @@ type Result = result::Result<(), Error>;
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::Io(err)
-    }
-}
-
-impl From<lexer::Error> for Error {
-    fn from(err: lexer::Error) -> Error {
-        Error::Lexer(err)
     }
 }
 
@@ -72,12 +64,11 @@ impl Compiler {
         In: io::Read,
         Out: io::Write,
     {
-        let filename = "<stdin>";
-        let mut src = String::new();
-        input.read_to_string(&mut src)?;
+        let filename = "<stdin>".to_string();
+        let mut content = String::new();
+        input.read_to_string(&mut content)?;
 
-        let tokens = lexer::lex(&src)?;
-        parser::parse(filename, &src, tokens, &mut self.ctx)?;
+        parser::parse(filename, &content, &mut self.ctx)?;
         name_res::resolve_decls(&mut self.ctx)?;
         name_res::resolve_defs(&mut self.ctx)?;
         type_chk::type_check(&mut self.ctx)?;
@@ -98,7 +89,6 @@ impl Compiler {
     {
         match *err {
             Error::Io(ref err) => write!(output, "{}", err),
-            Error::Lexer(ref err) => err.print(output, &self.ctx),
             Error::Parser(ref err) => err.print(output, &self.ctx),
             Error::NameRes(ref err) => err.print(output, &self.ctx),
             Error::TypeChecker(ref err) => err.print(output, &self.ctx),

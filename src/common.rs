@@ -5,25 +5,26 @@ use ctx::*;
 
 pub const INDENT: &str = "  ";
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct Span {
     pub start: Pos,
     pub end: Pos,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct Pos {
+    pub file: Index,
     pub line: i32,
     pub column: i32,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub enum Op {
     Arith(ArithOp),
     Comp(CompOp),
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub enum ArithOp {
     Add,
     Sub,
@@ -32,7 +33,7 @@ pub enum ArithOp {
     Mod,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub enum CompOp {
     Eq,
     Ne,
@@ -88,13 +89,20 @@ pub struct Segs {
 }
 
 impl Span {
-    pub const ZERO: Span = Span {
-        start: Pos::ZERO,
-        end: Pos::ZERO,
-    };
-
     pub fn new(start: Pos, end: Pos) -> Self {
         Span { start, end }
+    }
+
+    pub fn zero(file: Index) -> Self {
+        let pos = Pos {
+            file,
+            line: 0,
+            column: 0,
+        };
+        Span {
+            start: pos,
+            end: pos,
+        }
     }
 
     pub fn format(&self, ctx: &Context) -> String {
@@ -103,10 +111,9 @@ impl Span {
 }
 
 impl Pos {
-    pub const ZERO: Pos = Pos { line: 0, column: 0 };
-
-    pub fn format(&self, _ctx: &Context) -> String {
-        format!("{}:{}", self.line, self.column)
+    pub fn format(&self, ctx: &Context) -> String {
+        let filename = &ctx.sources[self.file].filename;
+        format!("{}:{}:{}", filename, self.line, self.column)
     }
 }
 
