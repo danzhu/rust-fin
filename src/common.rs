@@ -1,5 +1,8 @@
 use std::{fmt, ops, slice, usize};
 
+use def::*;
+use ctx::*;
+
 pub const INDENT: &str = "  ";
 
 #[derive(Copy, Clone, Debug)]
@@ -14,13 +17,13 @@ pub struct Pos {
     pub column: i32,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Op {
     Arith(ArithOp),
     Comp(CompOp),
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum ArithOp {
     Add,
     Sub,
@@ -29,7 +32,7 @@ pub enum ArithOp {
     Mod,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum CompOp {
     Eq,
     Ne,
@@ -93,25 +96,21 @@ impl Span {
     pub fn new(start: Pos, end: Pos) -> Self {
         Span { start, end }
     }
-}
 
-impl fmt::Display for Span {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} - {}", self.start, self.end)
+    pub fn format(&self, ctx: &Context) -> String {
+        format!("{} - {}", self.start.format(ctx), self.end.format(ctx))
     }
 }
 
 impl Pos {
     pub const ZERO: Pos = Pos { line: 0, column: 0 };
-}
 
-impl fmt::Display for Pos {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.line, self.column)
+    pub fn format(&self, _ctx: &Context) -> String {
+        format!("{}:{}", self.line, self.column)
     }
 }
 
-impl fmt::Debug for Op {
+impl fmt::Display for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Op::Arith(ArithOp::Add) => write!(f, "Add"),
@@ -199,7 +198,7 @@ impl Index {
     }
 }
 
-impl fmt::Debug for Index {
+impl fmt::Display for Index {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -216,14 +215,25 @@ impl Type {
             TypeKind::Void | TypeKind::Unknown => panic!("type with no path"),
         }
     }
+
+    pub fn format(&self, ctx: &Context) -> String {
+        match self.kind {
+            TypeKind::Named {
+                path: Path::Unresolved(ref segs),
+            } => format!("{}", segs),
+            TypeKind::Named {
+                path: Path::Resolved(idx),
+            } => format!("{}", ctx.type_defs[idx].name),
+            TypeKind::Void => "Void".to_string(),
+            TypeKind::Unknown => "Unknown".to_string(),
+        }
+    }
 }
 
-impl fmt::Debug for Type {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.kind {
-            TypeKind::Named { ref path } => write!(f, "{}", path),
-            TypeKind::Void => write!(f, "Void"),
-            TypeKind::Unknown => write!(f, "Unknown"),
+impl Default for Type {
+    fn default() -> Self {
+        Type {
+            kind: TypeKind::Unknown,
         }
     }
 }
@@ -232,11 +242,12 @@ impl Func {
     pub fn new(path: Path) -> Self {
         Self { path }
     }
-}
 
-impl fmt::Debug for Func {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.path)
+    pub fn format(&self, ctx: &Context) -> String {
+        match self.path {
+            Path::Unresolved(ref segs) => format!("{}", segs),
+            Path::Resolved(idx) => format!("{}", ctx.func_defs[idx].name),
+        }
     }
 }
 
@@ -244,11 +255,12 @@ impl Member {
     pub fn new(path: Path) -> Self {
         Self { path }
     }
-}
 
-impl fmt::Debug for Member {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.path)
+    pub fn format(&self, ctx: &Context, tp: &Type) -> String {
+        match self.path {
+            Path::Unresolved(ref segs) => format!("{}", segs),
+            Path::Resolved(idx) => format!("{}", ctx.get_type(tp).fields()[idx.value()].name),
+        }
     }
 }
 
@@ -256,11 +268,12 @@ impl Bind {
     pub fn new(path: Path) -> Self {
         Self { path }
     }
-}
 
-impl fmt::Debug for Bind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.path)
+    pub fn format(&self, _ctx: &Context, func: &FuncDef) -> String {
+        match self.path {
+            Path::Unresolved(ref segs) => format!("{}", segs),
+            Path::Resolved(idx) => format!("{}", func.locals[idx].name),
+        }
     }
 }
 
@@ -291,12 +304,8 @@ impl Path {
     }
 }
 
-// TODO: change to Debug
-impl fmt::Display for Path {
+impl fmt::Display for Segs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Path::Unresolved(ref segs) => write!(f, "{:?}", segs.name),
-            Path::Resolved(idx) => write!(f, "#{:?}", idx),
-        }
+        write!(f, "{}", self.name)
     }
 }

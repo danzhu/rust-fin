@@ -1,6 +1,8 @@
-use std::fmt;
+use std::io;
 
 use common::*;
+use def::*;
+use ctx::*;
 
 #[derive(Clone)]
 pub struct Expr {
@@ -93,25 +95,28 @@ impl Expr {
         Ok(())
     }
 
-    fn info(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn info<Out>(&self, f: &mut Out, ctx: &Context, def: &FuncDef) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         match self.kind {
             ExprKind::Block { .. } => {
                 write!(f, "Block")?;
             }
             ExprKind::Let { ref var, .. } => {
-                write!(f, "Let {:?}", var)?;
+                write!(f, "Let {}", var.format(ctx, def))?;
             }
             ExprKind::Construct { ref tp, .. } => {
-                write!(f, "Construct {:?}", tp)?;
+                write!(f, "Construct {}", tp.format(ctx))?;
             }
             ExprKind::Function { ref func, .. } => {
-                write!(f, "Function {:?}", func)?;
+                write!(f, "Function {}", func.format(ctx))?;
             }
-            ExprKind::Member { ref mem, .. } => {
-                write!(f, "Member {:?}", mem)?;
+            ExprKind::Member { ref value, ref mem } => {
+                write!(f, "Member {}", mem.format(ctx, &value.tp))?;
             }
             ExprKind::Binary { ref op, .. } => {
-                write!(f, "Binary {:?}", op)?;
+                write!(f, "Binary {}", op)?;
             }
             ExprKind::If { .. } => {
                 write!(f, "If")?;
@@ -120,31 +125,28 @@ impl Expr {
                 write!(f, "Int {}", i)?;
             }
             ExprKind::Id(ref id) => {
-                write!(f, "Id {:?}", id)?;
+                write!(f, "Id {}", id.format(ctx, def))?;
             }
             ExprKind::Noop => {
                 write!(f, "Noop")?;
             }
         }
 
-        write!(f, " -> {:?}", self.tp)?;
-        write!(f, " [{}]", self.span)
+        write!(f, " -> {}", self.tp.format(ctx))?;
+        write!(f, " [{}]", self.span.format(ctx))
     }
-}
 
-impl fmt::Debug for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fn print(expr: &Expr, f: &mut fmt::Formatter, ind: i32) -> fmt::Result {
-            for _ in 0..ind {
-                write!(f, "{}", INDENT)?;
-            }
-
-            expr.info(f)?;
-            writeln!(f)?;
-
-            expr.for_each(|expr| print(expr, f, ind + 1))
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context, def: &FuncDef, ind: i32) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        for _ in 0..ind {
+            write!(f, "{}", INDENT)?;
         }
 
-        print(self, f, 0)
+        self.info(f, ctx, def)?;
+        writeln!(f)?;
+
+        self.for_each(|expr| expr.print(f, ctx, def, ind + 1))
     }
 }

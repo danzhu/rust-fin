@@ -1,7 +1,8 @@
-use std::{fmt, io, iter, num, result};
+use std::{io, iter, num, result};
 
 use common::*;
 use token::*;
+use ctx::*;
 
 struct Lexer<Iter: Iterator<Item = char>> {
     source: iter::Peekable<Iter>,
@@ -171,9 +172,12 @@ where
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: error: ", self.pos)?;
+impl Error {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        write!(f, "{}: error: ", self.pos.format(ctx))?;
         match self.kind {
             ErrorKind::Io(ref err) => write!(f, "{}", err),
             ErrorKind::ParseInt(ref err) => write!(f, "{}", err),

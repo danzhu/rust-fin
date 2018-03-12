@@ -1,4 +1,4 @@
-use std::{fmt, result};
+use std::{io, result};
 
 use common::*;
 use ast::*;
@@ -118,7 +118,7 @@ impl<'a> Checker<'a> {
                 ref mut func,
                 ref mut args,
             } => {
-                let def = &self.ctx.func_defs[func.path.index()];
+                let def = &self.ctx.get_func(func);
 
                 if def.params.len() != args.len() {
                     return Err(Error {
@@ -144,7 +144,7 @@ impl<'a> Checker<'a> {
             } => {
                 self.check(value)?;
 
-                let def = &self.ctx.type_defs[value.tp.path().index()];
+                let def = &self.ctx.get_type(&value.tp);
                 match def.kind {
                     TypeDefKind::Struct {
                         ref fields,
@@ -217,9 +217,12 @@ impl<'a> Checker<'a> {
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: error: ", self.span.start)?;
+impl Error {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        write!(f, "{}: error: ", self.span.start.format(ctx))?;
         match self.kind {
             ErrorKind::ArgCount { expect, got } => {
                 write!(f, "expect {} arguments, got {}", expect, got)
@@ -227,13 +230,21 @@ impl fmt::Display for Error {
             ErrorKind::TypeMismatch {
                 ref expect,
                 ref got,
-            } => write!(f, "expect type {:?}, got {:?}", expect, got),
+            } => write!(
+                f,
+                "expect type {}, got {}",
+                expect.format(ctx),
+                got.format(ctx)
+            ),
             ErrorKind::ConstructPrimitive { ref tp } => {
-                write!(f, "attempt to construct primitive type {:?}", tp)
+                write!(f, "attempt to construct primitive type {}", tp.format(ctx))
             }
-            ErrorKind::MemberNotFound { ref tp, ref mem } => {
-                write!(f, "type {:?} doesn't have member {:?}", tp, mem)
-            }
+            ErrorKind::MemberNotFound { ref tp, ref mem } => write!(
+                f,
+                "type {} doesn't have member {}",
+                tp.format(ctx),
+                mem.format(ctx, tp)
+            ),
         }
     }
 }

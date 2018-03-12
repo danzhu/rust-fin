@@ -1,4 +1,4 @@
-use std::{fmt, result};
+use std::{io, result};
 use std::collections::HashMap;
 
 use common::*;
@@ -251,15 +251,18 @@ impl<'a> SymTable<'a> {
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: error: ", self.span.start)?;
+impl Error {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        write!(f, "{}: error: ", self.span.start.format(ctx))?;
         match self.kind {
             ErrorKind::SymbolNotFound(exp, ref path) => {
-                write!(f, "{} symbol {} not found", exp, path)
+                write!(f, "{} symbol {} not found", exp, path.name())
             }
             ErrorKind::WrongSymbolKind(exp, got) => {
-                write!(f, "expect {} symbol, got {:?}", exp, got)
+                write!(f, "expect {} symbol, got {}", exp, got.format(ctx))
             }
         }
     }

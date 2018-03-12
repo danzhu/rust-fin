@@ -22,7 +22,8 @@ const COMPILE_FAILED: i32 = 2;
 fn run() -> Result<(), i32> {
     let mut comp = Compiler::new();
     comp.compile(io::stdin(), io::stdout()).map_err(|err| {
-        eprintln!("{}", err);
+        comp.explain(&err, &mut io::stderr())
+            .expect("cannot write error to stderr");
         COMPILE_FAILED
     })
 }

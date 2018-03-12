@@ -1,9 +1,10 @@
-use std::fmt;
+use std::io;
 use std::collections::HashMap;
 
 use common::*;
 use ast::*;
 use ir::*;
+use ctx::*;
 
 #[derive(Clone)]
 pub struct Source {
@@ -72,36 +73,9 @@ impl Source {
     }
 }
 
-impl fmt::Debug for Source {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for def in &self.defs {
-            write!(f, "{:?}", def)?;
-        }
-        Ok(())
-    }
-}
-
 impl Def {
     pub fn new(kind: DefKind) -> Self {
         Self { kind }
-    }
-}
-
-impl fmt::Debug for Def {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.kind {
-            DefKind::Type(ref tp) => writeln!(f, "{:?}", tp),
-            DefKind::Func(ref func) => writeln!(f, "{:?}", func),
-        }
-    }
-}
-
-impl fmt::Debug for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Symbol::Func(idx) => write!(f, "function {:?}", idx),
-            Symbol::Type(idx) => write!(f, "type {:?}", idx),
-        }
     }
 }
 
@@ -115,26 +89,37 @@ impl TypeDef {
             kind,
         }
     }
-}
 
-impl fmt::Debug for TypeDef {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn fields(&self) -> &Vec<BindDef> {
+        match self.kind {
+            TypeDefKind::Struct { ref fields, .. } => fields,
+            TypeDefKind::Builtin(_) => panic!("builtin type has no fields"),
+        }
+    }
+
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         writeln!(f, "Type {}", self.name)?;
         match self.kind {
             TypeDefKind::Struct { ref fields, .. } => {
                 writeln!(f, "Struct")?;
                 for field in fields {
-                    writeln!(f, "{}{:?}", INDENT, field)?;
+                    writeln!(f, "{}{}", INDENT, field.format(ctx))?;
                 }
                 Ok(())
             }
-            TypeDefKind::Builtin(ref tp) => writeln!(f, "{:?}", tp),
+            TypeDefKind::Builtin(ref tp) => tp.print(f, ctx),
         }
     }
 }
 
-impl fmt::Debug for BuiltinType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl BuiltinType {
+    pub fn print<Out>(&self, f: &mut Out, _ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         match *self {
             BuiltinType::Int => writeln!(f, "Int"),
             BuiltinType::Bool => writeln!(f, "Bool"),
@@ -156,22 +141,28 @@ impl FuncDef {
             ir: Ir::new(),
         }
     }
-}
 
-impl fmt::Debug for FuncDef {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         writeln!(f, "Function {}", self.name)?;
+
         writeln!(f, "Params")?;
         for param in &self.params {
-            writeln!(f, "{}{:?}", INDENT, param)?;
+            writeln!(f, "{}{}", INDENT, param.format(ctx))?;
         }
-        writeln!(f, "Ret {:?}", self.ret)?;
+
+        writeln!(f, "Ret {}", self.ret.format(ctx))?;
+
         writeln!(f, "Locals")?;
         for local in &self.locals {
-            writeln!(f, "{}{:?}", INDENT, local)?;
+            writeln!(f, "{}{}", INDENT, local.format(ctx))?;
         }
-        write!(f, "{:?}", self.body)?;
-        write!(f, "{:?}", self.ir)
+
+        self.body.print(f, ctx, self, 0)?;
+
+        self.ir.print(f, ctx, self)
     }
 }
 
@@ -179,10 +170,17 @@ impl BindDef {
     pub fn new(name: String, tp: Type, span: Span) -> Self {
         Self { name, tp, span }
     }
+
+    pub fn format(&self, ctx: &Context) -> String {
+        format!("{} {}", self.name, self.tp.format(ctx))
+    }
 }
 
-impl fmt::Debug for BindDef {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {:?}", self.name, self.tp)
+impl Symbol {
+    pub fn format(&self, ctx: &Context) -> String {
+        match *self {
+            Symbol::Type(idx) => format!("type {}", ctx.type_defs[idx].name),
+            Symbol::Func(idx) => format!("function {}", ctx.func_defs[idx].name),
+        }
     }
 }

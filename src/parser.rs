@@ -1,10 +1,11 @@
-use std::{fmt, iter, result};
+use std::{io, iter, result};
 use std::collections::HashMap;
 
 use common::*;
 use token::*;
 use ast::*;
 use def::*;
+use ctx::*;
 
 struct Parser<Iter: Iterator<Item = Token>> {
     source: iter::Peekable<Iter>,
@@ -373,14 +374,18 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: error: ", self.span.start)?;
+impl Error {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        write!(f, "{}: error: ", self.span.start.format(ctx))?;
         match self.kind {
             ErrorKind::Expect {
                 expect,
                 got: Some(ref got),
             } => {
+                // TODO: make display for token
                 write!(f, "expect {}, but got {:?}", expect, got)?;
             }
             ErrorKind::Expect { expect, got: None } => {

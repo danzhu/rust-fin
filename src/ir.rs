@@ -1,6 +1,8 @@
-use std::fmt;
+use std::{fmt, io};
 
 use common::*;
+use def::*;
+use ctx::*;
 
 #[derive(Clone)]
 pub struct Ir {
@@ -69,13 +71,14 @@ impl Ir {
     pub fn get(&self, reg: Reg) -> &Stmt {
         &self.blocks[reg.block].stmts[reg.stmt]
     }
-}
 
-impl fmt::Debug for Ir {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context, def: &FuncDef) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         for (i, block) in self.blocks.iter().enumerate() {
             writeln!(f, "{}:", i)?;
-            write!(f, "{:?}", block)?;
+            block.print(f, ctx, def)?;
         }
         Ok(())
     }
@@ -88,14 +91,19 @@ impl Block {
             term: Term::Unreachable,
         }
     }
-}
 
-impl fmt::Debug for Block {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context, def: &FuncDef) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         for (i, stmt) in self.stmts.iter().enumerate() {
-            writeln!(f, "{}{} {:?}", INDENT, i, stmt)?;
+            write!(f, "{}{} ", INDENT, i)?;
+            stmt.print(f, ctx, def)?;
+            writeln!(f)?;
         }
-        writeln!(f, "{}{:?}", INDENT, self.term)
+        write!(f, "{}{} ", INDENT, "-")?;
+        self.term.print(f, ctx, def)?;
+        writeln!(f)
     }
 }
 
@@ -103,15 +111,16 @@ impl Stmt {
     pub fn new(kind: StmtKind, tp: Type) -> Self {
         Self { kind, tp }
     }
-}
 
-impl fmt::Debug for Stmt {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context, def: &FuncDef) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         match self.kind {
             StmtKind::Phi { ref values } => {
                 write!(f, "Phi")?;
                 for &(value, reg) in values {
-                    write!(f, " ({:?} {:?})", value, reg)?;
+                    write!(f, " ({} {})", value, reg)?;
                 }
             }
             StmtKind::Binary {
@@ -119,49 +128,57 @@ impl fmt::Debug for Stmt {
                 ref left,
                 ref right,
             } => {
-                write!(f, "Binary {:?} {:?} {:?}", op, left, right)?;
+                write!(f, "Binary {} {} {}", op, left, right)?;
             }
             StmtKind::Construct { ref tp, ref args } => {
-                write!(f, "Construct {:?}", tp)?;
+                write!(f, "Construct {}", tp.format(ctx))?;
                 for arg in args {
-                    write!(f, " {:?}", arg)?;
+                    write!(f, " {}", arg)?;
                 }
             }
             StmtKind::Call { ref func, ref args } => {
-                write!(f, "Call {:?}", func)?;
+                write!(f, "Call {}", func.format(ctx))?;
                 for arg in args {
-                    write!(f, " {:?}", arg)?;
+                    write!(f, " {}", arg)?;
                 }
             }
-            StmtKind::Member { ref value, ref mem } => {
-                write!(f, "Member {:?} {:?}", value, mem)?;
+            StmtKind::Member { value, ref mem } => {
+                write!(
+                    f,
+                    "Member {} {}",
+                    value,
+                    mem.format(ctx, &def.ir.get(value).tp)
+                )?;
             }
             StmtKind::Param(idx) => {
-                write!(f, "Param {:?}", idx)?;
+                write!(f, "Param {}", def.params[idx.value()].format(ctx))?;
             }
             StmtKind::Int(val) => {
                 write!(f, "Int {}", val)?;
             }
         }
 
-        write!(f, " -> {:?}", self.tp)
+        write!(f, " -> {}", self.tp.format(ctx))
     }
 }
 
-impl fmt::Debug for Term {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Term {
+    pub fn print<Out>(&self, f: &mut Out, _ctx: &Context, _def: &FuncDef) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         match *self {
-            Term::Br { cond, succ, fail } => write!(f, "Br {:?} {:?} {:?}", cond, succ, fail),
-            Term::Jump(block) => write!(f, "Jump {:?}", block),
-            Term::Ret(Some(reg)) => write!(f, "Ret {:?}", reg),
+            Term::Br { cond, succ, fail } => write!(f, "Br {} {} {}", cond, succ, fail),
+            Term::Jump(block) => write!(f, "Jump {}", block),
+            Term::Ret(Some(reg)) => write!(f, "Ret {}", reg),
             Term::Ret(None) => write!(f, "Ret"),
             Term::Unreachable => write!(f, "Unreachable"),
         }
     }
 }
 
-impl fmt::Debug for Reg {
+impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}:{:?}", self.block, self.stmt)
+        write!(f, "{}:{}", self.block, self.stmt)
     }
 }

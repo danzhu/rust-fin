@@ -1,47 +1,50 @@
-use std::fmt;
+use std::io;
 use std::collections::HashMap;
 
 use common::*;
 use def::*;
 
+#[derive(Default)]
 pub struct Context {
     pub type_defs: List<TypeDef>,
     pub func_defs: List<FuncDef>,
+
     pub sym_table: HashMap<String, Symbol>,
 
     pub type_int: Type,
     pub type_bool: Type,
 }
 
-macro_rules! define_tp {
-    ($store:expr, $type:ident, $name:ident) => {{
-        let kind = TypeDefKind::Builtin(BuiltinType::$name);
-        let tp = TypeDef::new(stringify!($name), kind);
-        let idx = $store.define_type(tp);
-        let path = Path::Resolved(idx);
-        $store.$type = Type::new(TypeKind::Named { path });
-    }}
-}
-
 impl Context {
     pub fn new() -> Self {
-        let mut store = Context {
-            type_defs: List::new(),
-            func_defs: List::new(),
-            sym_table: HashMap::new(),
+        macro_rules! define_tp {
+            ($ctx:expr, $name:ident) => {{
+                let kind = TypeDefKind::Builtin(BuiltinType::$name);
+                let tp = TypeDef::new(stringify!($name), kind);
+                let idx = $ctx.define_type(tp);
+                let path = Path::Resolved(idx);
+                Type::new(TypeKind::Named { path })
+            }}
+        }
 
-            type_int: Type::new(TypeKind::Unknown),
-            type_bool: Type::new(TypeKind::Unknown),
-        };
+        let mut ctx: Context = Default::default();
 
-        define_tp!(store, type_int, Int);
-        define_tp!(store, type_bool, Bool);
+        ctx.type_int = define_tp!(ctx, Int);
+        ctx.type_bool = define_tp!(ctx, Bool);
 
-        store
+        ctx
     }
 
     pub fn get_sym(&self, segs: &Segs) -> Option<Symbol> {
         self.sym_table.get(&segs.name).cloned()
+    }
+
+    pub fn get_type(&self, tp: &Type) -> &TypeDef {
+        &self.type_defs[tp.path().index()]
+    }
+
+    pub fn get_func(&self, func: &Func) -> &FuncDef {
+        &self.func_defs[func.path.index()]
     }
 
     pub fn define(&mut self, src: Source) {
@@ -70,15 +73,18 @@ impl Context {
         self.sym_table.insert(name, Symbol::Func(idx));
         idx
     }
-}
 
-impl fmt::Debug for Context {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn print<Out>(&self, f: &mut Out) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
         for tp in &self.type_defs {
-            writeln!(f, "{:?}", tp)?;
+            tp.print(f, self)?;
+            writeln!(f)?;
         }
         for func in &self.func_defs {
-            writeln!(f, "{:?}", func)?;
+            func.print(f, self)?;
+            writeln!(f)?;
         }
         Ok(())
     }

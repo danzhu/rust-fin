@@ -1,4 +1,4 @@
-use std::{fmt, io, result};
+use std::{io, result};
 
 use ctx::*;
 
@@ -53,18 +53,6 @@ impl From<code_gen::Error> for Error {
     }
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Lexer(ref err) => write!(f, "{}", err),
-            Error::Parser(ref err) => write!(f, "{}", err),
-            Error::NameRes(ref err) => write!(f, "{}", err),
-            Error::TypeChecker(ref err) => write!(f, "{}", err),
-            Error::CodeGen(ref err) => write!(f, "{}", err),
-        }
-    }
-}
-
 impl Compiler {
     pub fn new() -> Self {
         Self {
@@ -85,10 +73,25 @@ impl Compiler {
         type_chk::type_check(&mut self.ctx)?;
         ir_gen::generate(&mut self.ctx);
 
-        eprint!("{:?}", self.ctx);
+        self.ctx
+            .print(&mut io::stderr())
+            .expect("failed to dump context");
 
         code_gen::generate(&self.ctx, output)?;
 
         Ok(())
+    }
+
+    pub fn explain<Out>(&self, err: &Error, output: &mut Out) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        match *err {
+            Error::Lexer(ref err) => err.print(output, &self.ctx),
+            Error::Parser(ref err) => err.print(output, &self.ctx),
+            Error::NameRes(ref err) => err.print(output, &self.ctx),
+            Error::TypeChecker(ref err) => err.print(output, &self.ctx),
+            Error::CodeGen(ref err) => write!(output, "{}", err),
+        }
     }
 }

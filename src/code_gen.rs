@@ -106,7 +106,7 @@ fn alloc_values(ctx: &Context, func: &FuncDef) -> Vec<BlockValues> {
                     }
                     StmtKind::Construct { ref tp, .. } => {
                         // TODO: remove the need to check fields for value allocation
-                        let def = &ctx.type_defs[tp.path().index()];
+                        let def = &ctx.get_type(tp);
                         match def.kind {
                             TypeDefKind::Struct { ref fields, .. } => if fields.is_empty() {
                                 Value::Undefined
@@ -313,7 +313,7 @@ where
             StmtKind::Call { ref func, ref args } => {
                 let tp = type_name(self.ctx, &stmt.tp);
 
-                let func = &self.ctx.func_defs[func.path.index()];
+                let func = &self.ctx.get_func(func);
                 let name = funcdef_name(func);
 
                 if stmt.tp.kind == TypeKind::Void {
