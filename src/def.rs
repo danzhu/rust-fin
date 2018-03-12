@@ -3,11 +3,12 @@ use std::collections::HashMap;
 
 use common::*;
 use ast::*;
-use ir::*;
 use ctx::*;
 
 #[derive(Clone)]
 pub struct Source {
+    pub filename: String,
+    pub lines: Vec<String>,
     pub defs: Vec<Def>,
 }
 
@@ -18,8 +19,8 @@ pub struct Def {
 
 #[derive(Clone)]
 pub enum DefKind {
-    Type(TypeDef),
-    Func(FuncDef),
+    Type(Index),
+    Func(Index),
 }
 
 #[derive(Clone)]
@@ -51,7 +52,7 @@ pub struct FuncDef {
     pub body: Expr,
     pub span: Span,
     pub locals: List<BindDef>,
-    pub ir: Ir,
+    pub ir: Option<Index>,
 }
 
 #[derive(Clone)]
@@ -68,8 +69,15 @@ pub enum Symbol {
 }
 
 impl Source {
-    pub fn new() -> Self {
-        Self { defs: Vec::new() }
+    pub fn new<Str>(filename: Str, src: &str) -> Self
+    where
+        Str: Into<String>,
+    {
+        Self {
+            filename: filename.into(),
+            lines: src.lines().map(|s| s.to_string()).collect(),
+            defs: Vec::new(),
+        }
     }
 }
 
@@ -138,7 +146,7 @@ impl FuncDef {
             body,
             span,
             locals: List::new(),
-            ir: Ir::new(),
+            ir: None,
         }
     }
 
@@ -162,7 +170,11 @@ impl FuncDef {
 
         self.body.print(f, ctx, self, 0)?;
 
-        self.ir.print(f, ctx, self)
+        if let Some(ir) = self.ir {
+            ctx.irs[ir].print(f, ctx, self)?;
+        }
+
+        Ok(())
     }
 }
 

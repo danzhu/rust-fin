@@ -23,7 +23,8 @@ pub fn generate(ctx: &mut Context) {
         let res = gen.gen(&func.body, &mut block);
         gen.ir.end(block, Term::Ret(res));
 
-        func.ir = gen.ir;
+        let idx = ctx.irs.push(gen.ir);
+        func.ir = Some(idx);
     }
 }
 

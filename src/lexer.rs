@@ -15,21 +15,14 @@ pub struct Error {
 }
 
 pub enum ErrorKind {
-    Io(io::Error),
     ParseInt(num::ParseIntError),
     UnexpectedChar(char),
 }
 
 pub type Result<T> = result::Result<T, Error>;
 
-pub fn lex<In>(mut input: In) -> Result<Vec<Token>>
-where
-    In: io::Read,
-{
-    let mut src = String::new();
-    input.read_to_string(&mut src)?;
-    let lex = Lexer::new(src.chars());
-    lex.collect()
+pub fn lex(src: &str) -> Result<Vec<Token>> {
+    Lexer::new(src.chars()).collect()
 }
 
 impl<Iter> Lexer<Iter>
@@ -179,18 +172,8 @@ impl Error {
     {
         write!(f, "{}: error: ", self.pos.format(ctx))?;
         match self.kind {
-            ErrorKind::Io(ref err) => write!(f, "{}", err),
             ErrorKind::ParseInt(ref err) => write!(f, "{}", err),
             ErrorKind::UnexpectedChar(ch) => write!(f, "unexpected character '{}'", ch),
-        }
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error {
-            kind: ErrorKind::Io(err),
-            pos: Pos { line: 0, column: 0 },
         }
     }
 }

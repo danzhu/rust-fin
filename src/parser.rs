@@ -50,41 +50,41 @@ macro_rules! expect_value {
     }
 }
 
-pub fn parse<Iter>(tokens: Iter) -> Result<Source>
+pub fn parse<Iter>(filename: &str, src: &str, tokens: Iter, ctx: &mut Context) -> Result<Source>
 where
-    Iter: Iterator<Item = Token>,
+    Iter: IntoIterator<Item = Token>,
 {
     let mut par = Parser {
-        source: tokens.peekable(),
+        source: tokens.into_iter().peekable(),
         span: Span::ZERO,
     };
-    par.module()
-}
 
-impl<Iter: Iterator<Item = Token>> Parser<Iter> {
-    fn module(&mut self) -> Result<Source> {
-        let mut src = Source::new();
-        while self.peek().is_some() {
-            src.defs.push(self.def()?);
-        }
-        Ok(src)
-    }
-
-    fn def(&mut self) -> Result<Def> {
-        let kind = match self.next() {
-            Some(TokenKind::Struct) => DefKind::Type(self.structure()?),
-            Some(TokenKind::Def) => DefKind::Func(self.func()?),
+    let mut src = Source::new(filename, src);
+    while par.peek().is_some() {
+        let kind = match par.next() {
+            Some(TokenKind::Struct) => {
+                let def = par.structure()?;
+                let idx = ctx.define_type(def);
+                DefKind::Type(idx)
+            }
+            Some(TokenKind::Def) => {
+                let def = par.func()?;
+                let idx = ctx.define_func(def);
+                DefKind::Func(idx)
+            }
             got => {
-                return self.error(ErrorKind::Expect {
+                return par.error(ErrorKind::Expect {
                     expect: "top-level definition",
                     got,
                 })
             }
         };
-
-        Ok(Def::new(kind))
+        src.defs.push(Def::new(kind));
     }
+    Ok(src)
+}
 
+impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     fn structure(&mut self) -> Result<TypeDef> {
         let name = expect_value!(self, Type);
 

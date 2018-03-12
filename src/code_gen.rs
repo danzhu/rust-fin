@@ -12,6 +12,7 @@ where
     output: &'a mut Out,
     ctx: &'a Context,
     func: &'a FuncDef,
+    ir: &'a Ir,
     blocks: &'a Vec<BlockValues>,
     temp: usize,
 }
@@ -68,12 +69,15 @@ where
             writeln!(&mut output)?;
         }
 
-        let blocks = alloc_values(ctx, func);
+        let ir = &ctx.irs[func.ir.expect("ir not generated")];
+
+        let blocks = alloc_values(ctx, func, ir);
 
         let mut gen = FuncGen {
             output: &mut output,
             ctx,
             func,
+            ir,
             blocks: &blocks,
             temp: 0,
         };
@@ -82,9 +86,8 @@ where
     Ok(())
 }
 
-fn alloc_values(ctx: &Context, func: &FuncDef) -> Vec<BlockValues> {
-    func.ir
-        .blocks
+fn alloc_values(ctx: &Context, func: &FuncDef, ir: &Ir) -> Vec<BlockValues> {
+    ir.blocks
         .iter()
         .enumerate()
         .map(|(i, block)| {
@@ -213,7 +216,7 @@ where
         writeln!(self.output, ") {{")?;
 
         let mut first = true;
-        for (block, vals) in self.func.ir.blocks.iter().zip(self.blocks) {
+        for (block, vals) in self.ir.blocks.iter().zip(self.blocks) {
             if first {
                 first = false;
             } else {
@@ -404,7 +407,7 @@ where
     }
 
     fn reg_type(&self, reg: Reg) -> Value {
-        type_name(self.ctx, &self.func.ir.get(reg).tp)
+        type_name(self.ctx, &self.ir.get(reg).tp)
     }
 }
 

@@ -3,11 +3,16 @@ use std::collections::HashMap;
 
 use common::*;
 use def::*;
+use ir::*;
 
 #[derive(Default)]
 pub struct Context {
+    pub sources: List<Source>,
+
     pub type_defs: List<TypeDef>,
     pub func_defs: List<FuncDef>,
+
+    pub irs: List<Ir>,
 
     pub sym_table: HashMap<String, Symbol>,
 
@@ -47,27 +52,14 @@ impl Context {
         &self.func_defs[func.path.index()]
     }
 
-    pub fn define(&mut self, src: Source) {
-        for def in src.defs {
-            match def.kind {
-                DefKind::Type(tp) => {
-                    self.define_type(tp);
-                }
-                DefKind::Func(func) => {
-                    self.define_func(func);
-                }
-            }
-        }
-    }
-
-    fn define_type(&mut self, tp: TypeDef) -> Index {
+    pub fn define_type(&mut self, tp: TypeDef) -> Index {
         let name = tp.name.clone();
         let idx = self.type_defs.push(tp);
         self.sym_table.insert(name, Symbol::Type(idx));
         idx
     }
 
-    fn define_func(&mut self, func: FuncDef) -> Index {
+    pub fn define_func(&mut self, func: FuncDef) -> Index {
         let name = func.name.clone();
         let idx = self.func_defs.push(func);
         self.sym_table.insert(name, Symbol::Func(idx));

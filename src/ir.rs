@@ -143,12 +143,8 @@ impl Stmt {
                 }
             }
             StmtKind::Member { value, ref mem } => {
-                write!(
-                    f,
-                    "Member {} {}",
-                    value,
-                    mem.format(ctx, &def.ir.get(value).tp)
-                )?;
+                let ir = &ctx.irs[def.ir.expect("ir not generated")];
+                write!(f, "Member {} {}", value, mem.format(ctx, &ir.get(value).tp))?;
             }
             StmtKind::Param(idx) => {
                 write!(f, "Param {}", def.params[idx.value()].format(ctx))?;
