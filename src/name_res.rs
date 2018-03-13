@@ -2,6 +2,7 @@ use std::{io, result};
 use std::collections::HashMap;
 
 use common::*;
+use error::*;
 use ast::*;
 use def::*;
 use ctx::*;
@@ -22,18 +23,6 @@ enum SymTableParent<'a> {
     Table(&'a SymTable<'a>),
     Context(&'a Context),
 }
-
-pub struct Error {
-    pub kind: ErrorKind,
-    pub span: Span,
-}
-
-pub enum ErrorKind {
-    SymbolNotFound(&'static str, Path),
-    WrongSymbolKind(&'static str, Symbol),
-}
-
-pub type Result = result::Result<(), Error>;
 
 macro_rules! resolve_path {
     ($ctx:expr, $path:expr, $span:expr, $kind:ident) => {{
@@ -251,13 +240,21 @@ impl<'a> SymTable<'a> {
     }
 }
 
-impl Error {
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+pub type Result = result::Result<(), Error>;
+
+pub type Error = ErrorBase<ErrorKind>;
+
+pub enum ErrorKind {
+    SymbolNotFound(&'static str, Path),
+    WrongSymbolKind(&'static str, Symbol),
+}
+
+impl Print for ErrorKind {
+    fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
     where
         Out: io::Write,
     {
-        write!(f, "{}: error: ", self.span.start.format(ctx))?;
-        match self.kind {
+        match *self {
             ErrorKind::SymbolNotFound(exp, ref path) => {
                 write!(f, "{} symbol {} not found", exp, path.name())
             }

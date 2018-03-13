@@ -2,6 +2,7 @@ use std::{io, iter, num, result};
 use std::collections::HashMap;
 
 use common::*;
+use error::*;
 use token::*;
 use ast::*;
 use def::*;
@@ -39,8 +40,8 @@ pub fn parse(filename: String, content: &str, ctx: &mut Context) -> Result<()> {
         source: content.chars().peekable(),
         pos: Pos {
             file: idx,
-            line: 1,
-            column: 1,
+            line: 0,
+            column: 0,
         },
     };
     let tokens = lex.collect::<Result<Vec<_>>>()?;
@@ -95,7 +96,7 @@ where
         match ch {
             Some('\n') => {
                 self.pos.line += 1;
-                self.pos.column = 1;
+                self.pos.column = 0;
             }
             Some(_) => {
                 self.pos.column += 1;
@@ -119,6 +120,10 @@ where
                 _ => break s,
             }
         }
+    }
+
+    fn error<T>(&self, kind: ErrorKind, start: Pos) -> Option<Result<T>> {
+        Some(Err(Error { kind, span: Span::new(start, self.pos) }))
     }
 }
 
@@ -175,7 +180,7 @@ where
             let val = self.read_while(|c| c.is_numeric());
             match val.parse() {
                 Ok(val) => TokenKind::Int(val),
-                Err(err) => return error(ErrorKind::ParseInt(err), Span::new(start, self.pos)),
+                Err(err) => return self.error(ErrorKind::ParseInt(err), start),
             }
         } else {
             self.read();
@@ -204,7 +209,7 @@ where
                 '.' => TokenKind::Period,
                 '(' => TokenKind::LParen,
                 ')' => TokenKind::RParen,
-                _ => return error(ErrorKind::UnexpectedChar(ch), Span::new(start, self.pos)),
+                _ => return self.error(ErrorKind::UnexpectedChar(ch), start),
             }
         };
 
@@ -510,18 +515,25 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     }
 }
 
-pub struct Error {
-    pub kind: ErrorKind,
-    pub span: Span,
+pub type Result<T> = result::Result<T, Error>;
+
+pub type Error = ErrorBase<ErrorKind>;
+
+pub enum ErrorKind {
+    ParseInt(num::ParseIntError),
+    UnexpectedChar(char),
+    Expect {
+        expect: &'static str,
+        got: Option<TokenKind>,
+    },
 }
 
-impl Error {
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+impl Print for ErrorKind {
+    fn print<Out>(&self, f: &mut Out, _ctx: &Context) -> io::Result<()>
     where
         Out: io::Write,
     {
-        write!(f, "{}: error: ", self.span.start.format(ctx))?;
-        match self.kind {
+        match *self {
             ErrorKind::ParseInt(ref err) => write!(f, "{}", err),
             ErrorKind::UnexpectedChar(ch) => write!(f, "unexpected character '{}'", ch),
             ErrorKind::Expect {
@@ -533,19 +545,4 @@ impl Error {
             }
         }
     }
-}
-
-pub enum ErrorKind {
-    ParseInt(num::ParseIntError),
-    UnexpectedChar(char),
-    Expect {
-        expect: &'static str,
-        got: Option<TokenKind>,
-    },
-}
-
-pub type Result<T> = result::Result<T, Error>;
-
-fn error<T>(kind: ErrorKind, span: Span) -> Option<Result<T>> {
-    Some(Err(Error { kind, span }))
 }

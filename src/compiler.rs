@@ -1,5 +1,6 @@
 use std::{io, result};
 
+use error::*;
 use ctx::*;
 
 use parser;
@@ -20,7 +21,7 @@ pub enum Error {
     CodeGen(code_gen::Error),
 }
 
-type Result = result::Result<(), Error>;
+pub type Result = result::Result<(), Error>;
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {

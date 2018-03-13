@@ -1,6 +1,7 @@
 use std::{io, result};
 
 use common::*;
+use error::*;
 use ast::*;
 use def::*;
 use ctx::*;
@@ -9,20 +10,6 @@ struct Checker<'a> {
     ctx: &'a Context,
     locals: &'a mut List<BindDef>,
 }
-
-pub struct Error {
-    pub kind: ErrorKind,
-    pub span: Span,
-}
-
-pub enum ErrorKind {
-    ArgCount { expect: usize, got: usize },
-    TypeMismatch { expect: Type, got: Type },
-    ConstructPrimitive { tp: Type },
-    MemberNotFound { tp: Type, mem: Member },
-}
-
-pub type Result = result::Result<(), Error>;
 
 pub fn type_check(ctx: &mut Context) -> Result {
     let mut func_defs = ctx.func_defs.clone();
@@ -217,13 +204,23 @@ impl<'a> Checker<'a> {
     }
 }
 
-impl Error {
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+pub type Result = result::Result<(), Error>;
+
+pub type Error = ErrorBase<ErrorKind>;
+
+pub enum ErrorKind {
+    ArgCount { expect: usize, got: usize },
+    TypeMismatch { expect: Type, got: Type },
+    ConstructPrimitive { tp: Type },
+    MemberNotFound { tp: Type, mem: Member },
+}
+
+impl Print for ErrorKind {
+    fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
     where
         Out: io::Write,
     {
-        write!(f, "{}: error: ", self.span.start.format(ctx))?;
-        match self.kind {
+        match *self {
             ErrorKind::ArgCount { expect, got } => {
                 write!(f, "expect {} arguments, got {}", expect, got)
             }

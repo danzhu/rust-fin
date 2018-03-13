@@ -1,4 +1,5 @@
 mod common;
+mod error;
 mod token;
 mod ast;
 mod ir;

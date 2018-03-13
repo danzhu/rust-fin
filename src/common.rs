@@ -14,8 +14,8 @@ pub struct Span {
 #[derive(Copy, Clone)]
 pub struct Pos {
     pub file: Index,
-    pub line: i32,
-    pub column: i32,
+    pub line: usize,
+    pub column: usize,
 }
 
 #[derive(Copy, Clone)]
@@ -113,7 +113,7 @@ impl Span {
 impl Pos {
     pub fn format(&self, ctx: &Context) -> String {
         let filename = &ctx.sources[self.file].filename;
-        format!("{}:{}:{}", filename, self.line, self.column)
+        format!("{}:{}:{}", filename, self.line + 1, self.column + 1)
     }
 }
 
