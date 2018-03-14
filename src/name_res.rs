@@ -29,7 +29,7 @@ macro_rules! resolve_path {
         let ctx: &Context = $ctx;
         let path: &mut Path = $path;
         let span: Span = $span;
-        *path = match ctx.get_sym(path.segs()) {
+        *path = match ctx.get_sym(path.name()) {
             Some(Symbol::$kind(idx)) => Path::Resolved(idx),
             Some(sym) => return Err(Error{
                 kind: ErrorKind::WrongSymbolKind(stringify!($kind), sym),
@@ -55,13 +55,13 @@ fn resolve_declaration(ctx: &mut Context) -> Result {
         ($ctx:expr, $defs:ident, $kind:ident) => {
             for (i, def) in $ctx.$defs.iter().enumerate() {
                 let idx = Index::new(i);
-                if $ctx.sym_table.contains_key(&def.name) {
+                if $ctx.sym_table.contains_key(&def.name.name) {
                     return Err(Error {
                         kind: ErrorKind::DuplicateSymbol(stringify!($kind), def.name.clone()),
                         span: def.span,
                     });
                 }
-                $ctx.sym_table.insert(def.name.clone(), Symbol::$kind(idx));
+                $ctx.sym_table.insert(def.name.name.clone(), Symbol::$kind(idx));
             }
         }
     }
@@ -171,9 +171,9 @@ impl<'a> Resolver<'a> {
                 let idx = {
                     let name = var.path.name();
                     let tp = Type::new(TypeKind::Unknown);
-                    let bind = BindDef::new(name.clone(), tp, expr.span);
+                    let bind = BindDef::new(name.name.clone(), tp, expr.span);
                     let idx = self.locals.push(bind);
-                    syms.add(name.clone(), idx);
+                    syms.add(name.name.clone(), idx);
                     idx
                 };
                 var.path = Path::Resolved(idx);
@@ -223,7 +223,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(fail, &mut fail_syms)?;
             }
             ExprKind::Id(ref mut bind) => {
-                let idx = match syms.get(bind.path.name()) {
+                let idx = match syms.get(&bind.path.name().name) {
                     Some(idx) => idx,
                     None => {
                         return Err(Error {
@@ -273,7 +273,7 @@ pub type Result = result::Result<(), Error>;
 pub type Error = ErrorBase<ErrorKind>;
 
 pub enum ErrorKind {
-    DuplicateSymbol(&'static str, String),
+    DuplicateSymbol(&'static str, Name),
     SymbolNotFound(&'static str, Path),
     WrongSymbolKind(&'static str, Symbol),
 }

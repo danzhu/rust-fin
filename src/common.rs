@@ -78,13 +78,13 @@ pub struct Bind {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Path {
-    Unresolved(Segs),
+    Unresolved(Name),
     Resolved(Index),
 }
 
 // TODO: remove Eq and add custom impl for Path
 #[derive(Clone, PartialEq, Eq)]
-pub struct Segs {
+pub struct Name {
     pub name: String,
 }
 
@@ -226,8 +226,8 @@ impl Type {
     pub fn format(&self, ctx: &Context) -> String {
         match self.kind {
             TypeKind::Named {
-                path: Path::Unresolved(ref segs),
-            } => format!("{}", segs),
+                path: Path::Unresolved(ref name),
+            } => format!("{}", name),
             TypeKind::Named {
                 path: Path::Resolved(idx),
             } => format!("{}", ctx.type_defs[idx].name),
@@ -252,7 +252,7 @@ impl Func {
 
     pub fn format(&self, ctx: &Context) -> String {
         match self.path {
-            Path::Unresolved(ref segs) => format!("{}", segs),
+            Path::Unresolved(ref name) => format!("{}", name),
             Path::Resolved(idx) => format!("{}", ctx.func_defs[idx].name),
         }
     }
@@ -265,7 +265,7 @@ impl Member {
 
     pub fn format(&self, ctx: &Context, tp: &Type) -> String {
         match self.path {
-            Path::Unresolved(ref segs) => format!("{}", segs),
+            Path::Unresolved(ref name) => format!("{}", name),
             Path::Resolved(idx) => format!("{}", ctx.get_type(tp).fields()[idx.value()].name),
         }
     }
@@ -278,28 +278,21 @@ impl Bind {
 
     pub fn format(&self, _ctx: &Context, func: &FuncDef) -> String {
         match self.path {
-            Path::Unresolved(ref segs) => format!("{}", segs),
+            Path::Unresolved(ref name) => format!("{}", name),
             Path::Resolved(idx) => format!("{}", func.locals[idx].name),
         }
     }
 }
 
 impl Path {
-    pub fn new<Str>(name: Str) -> Self
-    where
-        Str: Into<String>,
-    {
-        Path::Unresolved(Segs { name: name.into() })
+    pub fn new(name: Name) -> Self {
+        Path::Unresolved(name)
     }
 
-    pub fn name(&self) -> &String {
-        &self.segs().name
-    }
-
-    pub fn segs(&self) -> &Segs {
+    pub fn name(&self) -> &Name {
         match *self {
-            Path::Unresolved(ref segs) => segs,
-            Path::Resolved(_) => panic!("calling segs on resolved path"),
+            Path::Unresolved(ref name) => name,
+            Path::Resolved(_) => panic!("calling name on resolved path"),
         }
     }
 
@@ -311,7 +304,13 @@ impl Path {
     }
 }
 
-impl fmt::Display for Segs {
+impl Name {
+    pub fn new(name: String) -> Self {
+        Name { name }
+    }
+}
+
+impl fmt::Display for Name {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
     }

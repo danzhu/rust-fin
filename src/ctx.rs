@@ -43,8 +43,8 @@ impl Context {
         ctx
     }
 
-    pub fn get_sym(&self, segs: &Segs) -> Option<Symbol> {
-        self.sym_table.get(&segs.name).cloned()
+    pub fn get_sym(&self, name: &Name) -> Option<Symbol> {
+        self.sym_table.get(&name.name).cloned()
     }
 
     pub fn get_type(&self, tp: &Type) -> &TypeDef {

@@ -25,7 +25,7 @@ pub enum DefKind {
 
 #[derive(Clone)]
 pub struct TypeDef {
-    pub name: String,
+    pub name: Name,
     pub span: Span,
     pub kind: TypeDefKind,
 }
@@ -47,7 +47,7 @@ pub enum BuiltinType {
 
 #[derive(Clone)]
 pub struct FuncDef {
-    pub name: String,
+    pub name: Name,
     pub params: Vec<BindDef>,
     pub ret: Type,
     pub body: Expr,
@@ -94,7 +94,7 @@ impl TypeDef {
         Str: Into<String>,
     {
         Self {
-            name: name.into(),
+            name: Name::new(name.into()),
             span,
             kind,
         }
@@ -137,12 +137,9 @@ impl BuiltinType {
     }
 }
 impl FuncDef {
-    pub fn new<Str>(name: Str, params: Vec<BindDef>, ret: Type, body: Expr, span: Span) -> Self
-    where
-        Str: Into<String>,
-    {
+    pub fn new(name: Name, params: Vec<BindDef>, ret: Type, body: Expr, span: Span) -> Self {
         Self {
-            name: name.into(),
+            name,
             params,
             ret,
             body,

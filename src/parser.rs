@@ -250,7 +250,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
     fn func(&mut self) -> Result<FuncDef> {
         let start = self.start_span();
-        let name = expect_value!(self, Id);
+        let name = Name::new(expect_value!(self, Id));
         let span = self.end_span(start);
 
         let params = self.bind_list()?;
@@ -313,7 +313,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             self.next();
             // TODO: pattern
             expect!(self, Let);
-            let var = expect_value!(self, Id);
+            let var = Name::new(expect_value!(self, Id));
 
             let span = self.end_span(start);
             Ok(Expr::new(
@@ -356,6 +356,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             self.next();
             let kind = match self.next() {
                 Some(TokenKind::Id(name)) => {
+                    let name = Name::new(name);
                     let args = self.args()?;
                     ExprKind::Function {
                         func: Func::new(Path::new(name)),
@@ -363,6 +364,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
                     }
                 }
                 Some(TokenKind::Type(name)) => {
+                    let name = Name::new(name);
                     let args = self.args()?;
                     ExprKind::Construct {
                         tp: Type::new(TypeKind::Named {
@@ -389,7 +391,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             let start = self.start_span();
 
             self.next();
-            let name = expect_value!(self, Id);
+            let name = Name::new(expect_value!(self, Id));
 
             let span = self.end_span(start);
             expr = Expr::new(
@@ -425,7 +427,10 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         let start = self.start_span();
 
         let kind = match self.next() {
-            Some(TokenKind::Id(name)) => ExprKind::Id(Bind::new(Path::new(name))),
+            Some(TokenKind::Id(name)) => {
+                let name = Name::new(name);
+                ExprKind::Id(Bind::new(Path::new(name)))
+            }
             Some(TokenKind::Int(val)) => ExprKind::Int(val),
             Some(TokenKind::If) => {
                 let cond = self.cond()?;
@@ -513,7 +518,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     }
 
     fn tp(&mut self) -> Result<Type> {
-        let name = expect_value!(self, Type);
+        let name = Name::new(expect_value!(self, Type));
         Ok(Type::new(TypeKind::Named {
             path: Path::new(name),
         }))

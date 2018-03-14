@@ -137,7 +137,7 @@ impl<'a> Checker<'a> {
                         ref fields,
                         ref sym_table,
                     } => {
-                        let idx = match sym_table.get(mem.path.name()) {
+                        let idx = match sym_table.get(&mem.path.name().name) {
                             Some(&idx) => idx,
                             None => {
                                 return Err(Error {

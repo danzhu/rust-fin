@@ -30,8 +30,8 @@ struct Label {
 #[derive(Clone)]
 enum Value {
     Builtin(&'static str),
-    Type(String),
-    Func(String),
+    Type(Name),
+    Func(Name),
     Param(String),
     Label(Label),
     Local(usize, usize),
