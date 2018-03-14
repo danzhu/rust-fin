@@ -43,7 +43,35 @@ macro_rules! resolve_path {
     }}
 }
 
-pub fn resolve_decls(ctx: &mut Context) -> Result {
+pub fn resolve(ctx: &mut Context) -> Result {
+    resolve_declaration(ctx)?;
+    resolve_interface(ctx)?;
+    resolve_implementation(ctx)?;
+    Ok(())
+}
+
+fn resolve_declaration(ctx: &mut Context) -> Result {
+    macro_rules! declare_syms {
+        ($ctx:expr, $defs:ident, $kind:ident) => {
+            for (i, def) in $ctx.$defs.iter().enumerate() {
+                let idx = Index::new(i);
+                if $ctx.sym_table.contains_key(&def.name) {
+                    return Err(Error {
+                        kind: ErrorKind::DuplicateSymbol(stringify!($kind), def.name.clone()),
+                        span: def.span,
+                    });
+                }
+                $ctx.sym_table.insert(def.name.clone(), Symbol::$kind(idx));
+            }
+        }
+    }
+
+    declare_syms!(ctx, type_defs, Type);
+    declare_syms!(ctx, func_defs, Func);
+    Ok(())
+}
+
+fn resolve_interface(ctx: &mut Context) -> Result {
     let mut type_defs = ctx.type_defs.clone();
     let mut func_defs = ctx.func_defs.clone();
     {
@@ -69,7 +97,7 @@ pub fn resolve_decls(ctx: &mut Context) -> Result {
     Ok(())
 }
 
-pub fn resolve_defs(ctx: &mut Context) -> Result {
+fn resolve_implementation(ctx: &mut Context) -> Result {
     let mut type_defs = ctx.type_defs.clone();
     let mut func_defs = ctx.func_defs.clone();
 
@@ -245,6 +273,7 @@ pub type Result = result::Result<(), Error>;
 pub type Error = ErrorBase<ErrorKind>;
 
 pub enum ErrorKind {
+    DuplicateSymbol(&'static str, String),
     SymbolNotFound(&'static str, Path),
     WrongSymbolKind(&'static str, Symbol),
 }
@@ -255,11 +284,14 @@ impl Print for ErrorKind {
         Out: io::Write,
     {
         match *self {
-            ErrorKind::SymbolNotFound(exp, ref path) => {
-                write!(f, "{} symbol {} not found", exp, path.name())
+            ErrorKind::DuplicateSymbol(kind, ref name) => {
+                write!(f, "duplicate {} symbol {}", kind, name)
             }
-            ErrorKind::WrongSymbolKind(exp, got) => {
-                write!(f, "expect {} symbol, got {}", exp, got.format(ctx))
+            ErrorKind::SymbolNotFound(kind, ref path) => {
+                write!(f, "{} symbol {} not found", kind, path.name())
+            }
+            ErrorKind::WrongSymbolKind(kind, got) => {
+                write!(f, "expect {} symbol, got {}", kind, got.format(ctx))
             }
         }
     }

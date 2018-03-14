@@ -26,6 +26,7 @@ pub enum DefKind {
 #[derive(Clone)]
 pub struct TypeDef {
     pub name: String,
+    pub span: Span,
     pub kind: TypeDefKind,
 }
 
@@ -88,12 +89,13 @@ impl Def {
 }
 
 impl TypeDef {
-    pub fn new<Str>(name: Str, kind: TypeDefKind) -> Self
+    pub fn new<Str>(name: Str, span: Span, kind: TypeDefKind) -> Self
     where
         Str: Into<String>,
     {
         Self {
             name: name.into(),
+            span,
             kind,
         }
     }

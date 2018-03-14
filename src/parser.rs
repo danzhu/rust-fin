@@ -57,12 +57,12 @@ pub fn parse(filename: String, content: &str, ctx: &mut Context) -> Result<()> {
         let kind = match par.next() {
             Some(TokenKind::Struct) => {
                 let def = par.structure()?;
-                let idx = ctx.define_type(def);
+                let idx = ctx.type_defs.push(def);
                 DefKind::Type(idx)
             }
             Some(TokenKind::Def) => {
                 let def = par.func()?;
-                let idx = ctx.define_func(def);
+                let idx = ctx.func_defs.push(def);
                 DefKind::Func(idx)
             }
             got => {
@@ -123,7 +123,10 @@ where
     }
 
     fn error<T>(&self, kind: ErrorKind, start: Pos) -> Option<Result<T>> {
-        Some(Err(Error { kind, span: Span::new(start, self.pos) }))
+        Some(Err(Error {
+            kind,
+            span: Span::new(start, self.pos),
+        }))
     }
 }
 
@@ -227,7 +230,9 @@ struct Parser<Iter: Iterator<Item = Token>> {
 
 impl<Iter: Iterator<Item = Token>> Parser<Iter> {
     fn structure(&mut self) -> Result<TypeDef> {
+        let start = self.start_span();
         let name = expect_value!(self, Type);
+        let span = self.end_span(start);
 
         let fields = self.bind_list()?;
 
@@ -235,6 +240,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
         Ok(TypeDef::new(
             name,
+            span,
             TypeDefKind::Struct {
                 fields,
                 sym_table: HashMap::new(),
@@ -244,8 +250,8 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
     fn func(&mut self) -> Result<FuncDef> {
         let start = self.start_span();
-
         let name = expect_value!(self, Id);
+        let span = self.end_span(start);
 
         let params = self.bind_list()?;
 
@@ -262,7 +268,6 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
         expect!(self, Period);
 
-        let span = self.end_span(start);
         Ok(FuncDef::new(name, params, ret, body, span))
     }
 

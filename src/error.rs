@@ -10,11 +10,11 @@ pub struct ErrorBase<Kind> {
 
 impl<Kind> Print for ErrorBase<Kind>
 where
-    Kind: Print
+    Kind: Print,
 {
     fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
     where
-        Out: io::Write
+        Out: io::Write,
     {
         let start = self.span.start;
         write!(f, "{}: error: ", start.format(ctx))?;
@@ -22,12 +22,10 @@ where
         writeln!(f)?;
 
         let line = &ctx.sources[start.file].lines[start.line];
-        writeln!(f, "{}{}", INDENT, line)?;
+        writeln!(f, "{}", line)?;
 
         let end = self.span.end;
         if start.file == end.file && start.line == end.line {
-            write!(f, "{}", INDENT)?;
-
             for _ in 0..start.column {
                 write!(f, " ")?;
             }

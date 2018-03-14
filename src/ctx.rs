@@ -23,10 +23,11 @@ pub struct Context {
 impl Context {
     pub fn new() -> Self {
         macro_rules! define_tp {
-            ($ctx:expr, $name:ident) => {{
+            ($ctx:expr, $src:expr, $name:ident) => {{
+                let span = Span::zero($src);
                 let kind = TypeDefKind::Builtin(BuiltinType::$name);
-                let tp = TypeDef::new(stringify!($name), kind);
-                let idx = $ctx.define_type(tp);
+                let tp = TypeDef::new(stringify!($name), span, kind);
+                let idx = $ctx.type_defs.push(tp);
                 let path = Path::Resolved(idx);
                 Type::new(TypeKind::Named { path })
             }}
@@ -34,8 +35,10 @@ impl Context {
 
         let mut ctx: Context = Default::default();
 
-        ctx.type_int = define_tp!(ctx, Int);
-        ctx.type_bool = define_tp!(ctx, Bool);
+        let src = ctx.sources.push(Source::new("<builtin>", ""));
+
+        ctx.type_int = define_tp!(ctx, src, Int);
+        ctx.type_bool = define_tp!(ctx, src, Bool);
 
         ctx
     }
@@ -50,20 +53,6 @@ impl Context {
 
     pub fn get_func(&self, func: &Func) -> &FuncDef {
         &self.func_defs[func.path.index()]
-    }
-
-    pub fn define_type(&mut self, tp: TypeDef) -> Index {
-        let name = tp.name.clone();
-        let idx = self.type_defs.push(tp);
-        self.sym_table.insert(name, Symbol::Type(idx));
-        idx
-    }
-
-    pub fn define_func(&mut self, func: FuncDef) -> Index {
-        let name = func.name.clone();
-        let idx = self.func_defs.push(func);
-        self.sym_table.insert(name, Symbol::Func(idx));
-        idx
     }
 
     pub fn print<Out>(&self, f: &mut Out) -> io::Result<()>

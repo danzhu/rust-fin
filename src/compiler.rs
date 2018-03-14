@@ -70,8 +70,7 @@ impl Compiler {
         input.read_to_string(&mut content)?;
 
         parser::parse(filename, &content, &mut self.ctx)?;
-        name_res::resolve_decls(&mut self.ctx)?;
-        name_res::resolve_defs(&mut self.ctx)?;
+        name_res::resolve(&mut self.ctx)?;
         type_chk::type_check(&mut self.ctx)?;
         ir_gen::generate(&mut self.ctx);
 
