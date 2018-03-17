@@ -169,7 +169,7 @@ impl Expr {
                 act(succ)?;
                 act(fail)?;
             }
-            ExprKind::Int { .. } | ExprKind::Id { .. } | ExprKind::Noop => {}
+            ExprKind::Int { .. } | ExprKind::Bind { .. } | ExprKind::Noop => {}
         }
 
         Ok(())
@@ -204,8 +204,8 @@ impl Expr {
             ExprKind::Int { value } => {
                 write!(f, "Int {}", value)?;
             }
-            ExprKind::Id { ref bind } => {
-                write!(f, "Id {}", bind.format(ctx, def, body))?;
+            ExprKind::Bind { ref bind } => {
+                write!(f, "Bind {}", bind.format(ctx, def, body))?;
             }
             ExprKind::Noop => {
                 write!(f, "Noop")?;
@@ -272,7 +272,7 @@ pub enum ExprKind {
     Int {
         value: i32,
     },
-    Id {
+    Bind {
         bind: Bind,
     },
     Noop,

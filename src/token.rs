@@ -32,7 +32,7 @@ pub enum TokenKind {
     Quote,
     Not,
     Operator(Op),
-    Id(String),
+    Bind(String),
     Type(String),
     Int(i32),
 }
@@ -56,7 +56,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Quote => write!(f, "quote"),
             TokenKind::Not => write!(f, "not"),
             TokenKind::Operator(op) => write!(f, "operator {}", op),
-            TokenKind::Id(ref id) => write!(f, "id {}", id),
+            TokenKind::Bind(ref bind) => write!(f, "bind {}", bind),
             TokenKind::Type(ref tp) => write!(f, "type {}", tp),
             TokenKind::Int(val) => write!(f, "int {}", val),
         }

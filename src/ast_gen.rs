@@ -410,13 +410,13 @@ impl<'a> Resolver<'a> {
                 };
                 Expr { tp, span, kind }
             }
-            ExprNodeKind::Id { ref bind } => {
+            ExprNodeKind::Bind { ref bind } => {
                 let bind = match syms.get(&bind.path.name) {
                     Some(bind) => bind,
                     None => {
                         return Err(Error {
                             kind: ErrorKind::SymbolNotFound {
-                                kind: "Id",
+                                kind: "Bind",
                                 path: bind.path.clone(),
                             },
                             span: expr.span,
@@ -427,7 +427,7 @@ impl<'a> Resolver<'a> {
                     BindKind::Param { index } => self.func.params[index].tp.clone(),
                     BindKind::Local { index } => self.locals[index].tp.clone(),
                 };
-                let kind = ExprKind::Id { bind };
+                let kind = ExprKind::Bind { bind };
                 Expr { tp, span, kind }
             }
             ExprNodeKind::Int { value } => {

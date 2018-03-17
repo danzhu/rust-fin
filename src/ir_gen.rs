@@ -115,7 +115,7 @@ impl Generator {
                     values: vec![(succ, succ_block), (fail, fail_block)],
                 }
             }
-            ExprKind::Id { ref bind } => {
+            ExprKind::Bind { ref bind } => {
                 return Some(match bind.kind {
                     BindKind::Param { index } => self.ir.params[index],
                     BindKind::Local { index } => self.ir.locals[index],

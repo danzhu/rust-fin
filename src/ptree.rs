@@ -87,7 +87,7 @@ pub enum ExprNodeKind {
     Int {
         value: i32,
     },
-    Id {
+    Bind {
         bind: BindRef,
     },
     Noop,

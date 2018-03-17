@@ -162,9 +162,9 @@ where
 
         let kind = if ch.is_alphabetic() {
             // id
-            let id = self.read_while(|c| c.is_alphanumeric());
+            let val = self.read_while(|c| c.is_alphanumeric());
 
-            match id.as_ref() {
+            match val.as_ref() {
                 "def" => TokenKind::Def,
                 "struct" => TokenKind::Struct,
                 "as" => TokenKind::As,
@@ -174,9 +174,9 @@ where
                 "else" => TokenKind::Else,
                 "let" => TokenKind::Let,
                 _ => if ch.is_lowercase() {
-                    TokenKind::Id(id)
+                    TokenKind::Bind(val)
                 } else {
-                    TokenKind::Type(id)
+                    TokenKind::Type(val)
                 },
             }
         } else if ch.is_numeric() {
@@ -248,7 +248,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
     fn func(&mut self) -> Result<FuncNode> {
         let start = self.start_span();
-        let name = expect_value!(self, Id);
+        let name = expect_value!(self, Bind);
         let span = self.end_span(start);
 
         let params = self.bind_list()?;
@@ -277,7 +277,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
     fn bind_list(&mut self) -> Result<Vec<BindNode>> {
         let mut binds = Vec::new();
-        while let Some(&TokenKind::Id(_)) = self.peek() {
+        while let Some(&TokenKind::Bind(_)) = self.peek() {
             binds.push(self.bind()?);
         }
         Ok(binds)
@@ -285,7 +285,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
     fn bind(&mut self) -> Result<BindNode> {
         let start = self.start_span();
-        let name = expect_value!(self, Id);
+        let name = expect_value!(self, Bind);
         let tp = self.tp()?;
         let span = self.end_span(start);
         Ok(BindNode { name, tp, span })
@@ -321,7 +321,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             // TODO: pattern
             expect!(self, Let);
             let local_start = self.start_span();
-            let name = expect_value!(self, Id);
+            let name = expect_value!(self, Bind);
             let local_span = self.end_span(local_start);
 
             let span = self.end_span(start);
@@ -373,7 +373,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             let name_span = self.end_span(name_start);
 
             let kind = match name {
-                Some(TokenKind::Id(name)) => {
+                Some(TokenKind::Bind(name)) => {
                     let args = self.args()?;
                     ExprNodeKind::Function {
                         func: FuncRef {
@@ -413,7 +413,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             self.next();
             let mem = {
                 let start = self.start_span();
-                let name = expect_value!(self, Id);
+                let name = expect_value!(self, Bind);
                 let span = self.end_span(start);
                 MemberRef { name, span }
             };
@@ -436,7 +436,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         loop {
             // TODO: remove ugly duplicate code
             match self.peek() {
-                Some(&TokenKind::Id(_))
+                Some(&TokenKind::Bind(_))
                 | Some(&TokenKind::Int(_))
                 | Some(&TokenKind::If)
                 | Some(&TokenKind::LParen) => {
@@ -452,9 +452,9 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         let start = self.start_span();
 
         let kind = match self.next() {
-            Some(TokenKind::Id(name)) => {
+            Some(TokenKind::Bind(name)) => {
                 let span = self.end_span(start);
-                ExprNodeKind::Id {
+                ExprNodeKind::Bind {
                     bind: BindRef {
                         path: Path { name },
                         span,
