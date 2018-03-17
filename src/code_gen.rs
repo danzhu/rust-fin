@@ -1,8 +1,8 @@
 use std::{fmt, io, result};
 
 use common::*;
+use ast::*;
 use ir::*;
-use def::*;
 use ctx::*;
 
 struct FuncGen<'a, Out>
@@ -30,9 +30,9 @@ struct Label {
 #[derive(Clone)]
 enum Value {
     Builtin(&'static str),
-    Type(Name),
-    Func(Name),
-    Param(String),
+    Type(Path),
+    Func(Path),
+    Param(Name),
     Label(Label),
     Local(usize, usize),
     Temp(usize),
@@ -117,10 +117,11 @@ fn alloc_values(ctx: &Context, func: &FuncDef, ir: &Ir) -> Vec<BlockValues> {
                                 Value::Local(i, j)
                             },
                             TypeDefKind::Builtin(_) => panic!("constructing primtive type"),
+                            TypeDefKind::Opaque => panic!("constructing opaque type"),
                         }
                     }
                     StmtKind::Param(param) => {
-                        let param = &func.params[param.value()];
+                        let param = &func.params[param];
                         param_name(param)
                     }
                     StmtKind::Int(val) => Value::Int(val),
@@ -135,7 +136,7 @@ fn gen_type<Out>(ctx: &Context, tp: &TypeDef, output: &mut Out) -> Result<()>
 where
     Out: io::Write,
 {
-    writeln!(output, "; Type {}", tp.name)?;
+    writeln!(output, "; Type {}", tp.path)?;
     match tp.kind {
         TypeDefKind::Struct { ref fields, .. } => {
             let name = typedef_name(tp);
@@ -156,33 +157,34 @@ where
             writeln!(output, " }}")?;
         }
         TypeDefKind::Builtin(_) => {}
+        TypeDefKind::Opaque => panic!("generating opaque type"),
     }
     Ok(())
 }
 
 fn type_name(ctx: &Context, tp: &Type) -> Value {
     match tp.kind {
-        TypeKind::Named { ref path } => {
-            let def = &ctx.type_defs[path.index()];
+        TypeKind::Named { index } => {
+            let def = &ctx.type_defs[index];
             typedef_name(def)
         }
         TypeKind::Void => Value::Builtin("void"),
-        TypeKind::Unknown => panic!("unresolved type"),
     }
 }
 
 fn typedef_name(tp: &TypeDef) -> Value {
     match tp.kind {
-        TypeDefKind::Struct { .. } => Value::Type(tp.name.clone()),
+        TypeDefKind::Struct { .. } => Value::Type(tp.path.clone()),
         TypeDefKind::Builtin(ref tp) => Value::Builtin(match *tp {
             BuiltinType::Int => "i32",
             BuiltinType::Bool => "i1",
         }),
+        TypeDefKind::Opaque => panic!("getting name of opaque type"),
     }
 }
 
 fn funcdef_name(func: &FuncDef) -> Value {
-    Value::Func(func.name.clone())
+    Value::Func(func.path.clone())
 }
 
 fn param_name(param: &BindDef) -> Value {
@@ -197,7 +199,7 @@ where
         let name = funcdef_name(self.func);
         let ret = type_name(self.ctx, &self.func.ret);
 
-        writeln!(self.output, "; Func {}", self.func.name)?;
+        writeln!(self.output, "; Func {}", self.func.path)?;
         write!(self.output, "define {} {}(", ret, name)?;
 
         let mut first = true;
@@ -344,7 +346,7 @@ where
             StmtKind::Member { value, ref mem } => {
                 let tp = self.reg_type(value);
                 let value = self.reg(value);
-                let idx = mem.path.index().value();
+                let idx = mem.index.value();
 
                 writeln!(
                     self.output,

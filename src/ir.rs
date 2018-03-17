@@ -1,13 +1,14 @@
 use std::{fmt, io};
 
 use common::*;
-use def::*;
+use ast::*;
 use ctx::*;
 
 #[derive(Clone)]
 pub struct Ir {
-    pub locals: List<Reg>,
     pub blocks: List<Block>,
+    pub params: List<Reg>,
+    pub locals: List<Reg>,
 }
 
 #[derive(Clone)]
@@ -48,13 +49,6 @@ pub struct Reg {
 }
 
 impl Ir {
-    pub fn new() -> Self {
-        Self {
-            locals: List::new(),
-            blocks: List::new(),
-        }
-    }
-
     pub fn write(&mut self, block: Index, stmt: Stmt) -> Reg {
         let stmt = self.blocks[block].stmts.push(stmt);
         Reg { block, stmt }
@@ -143,11 +137,10 @@ impl Stmt {
                 }
             }
             StmtKind::Member { value, ref mem } => {
-                let ir = &ctx.irs[def.ir.expect("ir not generated")];
-                write!(f, "Member {} {}", value, mem.format(ctx, &ir.get(value).tp))?;
+                write!(f, "Member {} {}", value, mem.format(ctx))?;
             }
             StmtKind::Param(idx) => {
-                write!(f, "Param {}", def.params[idx.value()].format(ctx))?;
+                write!(f, "Param {}", def.params[idx].format(ctx))?;
             }
             StmtKind::Int(val) => {
                 write!(f, "Int {}", val)?;

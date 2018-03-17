@@ -1,14 +1,13 @@
 mod common;
 mod error;
 mod token;
+mod ptree;
 mod ast;
 mod ir;
-mod def;
 mod ctx;
 
 mod parser;
-mod name_res;
-mod type_chk;
+mod ast_gen;
 mod ir_gen;
 mod code_gen;
 mod compiler;

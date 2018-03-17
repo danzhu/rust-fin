@@ -1,11 +1,9 @@
 use std::{io, iter, num, result};
-use std::collections::HashMap;
 
 use common::*;
 use error::*;
 use token::*;
-use ast::*;
-use def::*;
+use ptree::*;
 use ctx::*;
 
 macro_rules! expect {
@@ -33,7 +31,12 @@ macro_rules! expect_value {
 }
 
 pub fn parse(filename: String, content: &str, ctx: &mut Context) -> Result<()> {
-    let src = Source::new(filename, content);
+    let src = SourceNode {
+        filename,
+        lines: content.lines().map(|s| s.to_string()).collect(),
+        items: Vec::new(),
+    };
+
     let idx = ctx.sources.push(src);
 
     let lex = Lexer {
@@ -51,19 +54,17 @@ pub fn parse(filename: String, content: &str, ctx: &mut Context) -> Result<()> {
         span: Span::zero(idx),
     };
 
-    let mut defs = Vec::new();
+    let mut items = Vec::new();
 
     while par.peek().is_some() {
-        let kind = match par.next() {
+        let item = match par.next() {
             Some(TokenKind::Struct) => {
                 let def = par.structure()?;
-                let idx = ctx.type_defs.push(def);
-                DefKind::Type(idx)
+                ItemNode::Type(def)
             }
             Some(TokenKind::Def) => {
                 let def = par.func()?;
-                let idx = ctx.func_defs.push(def);
-                DefKind::Func(idx)
+                ItemNode::Func(def)
             }
             got => {
                 return par.error(ErrorKind::Expect {
@@ -72,10 +73,10 @@ pub fn parse(filename: String, content: &str, ctx: &mut Context) -> Result<()> {
                 })
             }
         };
-        defs.push(Def::new(kind));
+        items.push(item);
     }
 
-    ctx.sources[idx].defs = defs;
+    ctx.sources[idx].items = items;
     Ok(())
 }
 
@@ -229,7 +230,7 @@ struct Parser<Iter: Iterator<Item = Token>> {
 }
 
 impl<Iter: Iterator<Item = Token>> Parser<Iter> {
-    fn structure(&mut self) -> Result<TypeDef> {
+    fn structure(&mut self) -> Result<TypeNode> {
         let start = self.start_span();
         let name = expect_value!(self, Type);
         let span = self.end_span(start);
@@ -238,28 +239,25 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
         expect!(self, Period);
 
-        Ok(TypeDef::new(
+        Ok(TypeNode {
             name,
             span,
-            TypeDefKind::Struct {
-                fields,
-                sym_table: HashMap::new(),
-            },
-        ))
+            kind: TypeNodeKind::Struct { fields },
+        })
     }
 
-    fn func(&mut self) -> Result<FuncDef> {
+    fn func(&mut self) -> Result<FuncNode> {
         let start = self.start_span();
-        let name = Name::new(expect_value!(self, Id));
+        let name = expect_value!(self, Id);
         let span = self.end_span(start);
 
         let params = self.bind_list()?;
 
         let ret = if let Some(&TokenKind::Arrow) = self.peek() {
             self.next();
-            self.tp()?
+            RetRef::Named(self.tp()?)
         } else {
-            Type::new(TypeKind::Void)
+            RetRef::Void
         };
 
         expect!(self, As);
@@ -268,10 +266,16 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
         expect!(self, Period);
 
-        Ok(FuncDef::new(name, params, ret, body, span))
+        Ok(FuncNode {
+            name,
+            params,
+            ret,
+            body,
+            span,
+        })
     }
 
-    fn bind_list(&mut self) -> Result<Vec<BindDef>> {
+    fn bind_list(&mut self) -> Result<Vec<BindNode>> {
         let mut binds = Vec::new();
         while let Some(&TokenKind::Id(_)) = self.peek() {
             binds.push(self.bind()?);
@@ -279,15 +283,15 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         Ok(binds)
     }
 
-    fn bind(&mut self) -> Result<BindDef> {
+    fn bind(&mut self) -> Result<BindNode> {
         let start = self.start_span();
         let name = expect_value!(self, Id);
         let tp = self.tp()?;
         let span = self.end_span(start);
-        Ok(BindDef::new(name, tp, span))
+        Ok(BindNode { name, tp, span })
     }
 
-    fn block(&mut self) -> Result<Expr> {
+    fn block(&mut self) -> Result<ExprNode> {
         let start = self.start_span();
 
         let stmt = self.statement()?;
@@ -299,13 +303,16 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             }
 
             let span = self.end_span(start);
-            Ok(Expr::new(ExprKind::Block { stmts }, span))
+            Ok(ExprNode {
+                span,
+                kind: ExprNodeKind::Block { stmts },
+            })
         } else {
             Ok(stmt)
         }
     }
 
-    fn statement(&mut self) -> Result<Expr> {
+    fn statement(&mut self) -> Result<ExprNode> {
         let start = self.start_span();
 
         let expr = self.expr()?;
@@ -313,22 +320,27 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             self.next();
             // TODO: pattern
             expect!(self, Let);
-            let var = Name::new(expect_value!(self, Id));
+            let local_start = self.start_span();
+            let name = expect_value!(self, Id);
+            let local_span = self.end_span(local_start);
 
             let span = self.end_span(start);
-            Ok(Expr::new(
-                ExprKind::Let {
-                    value: Box::new(expr),
-                    var: Bind::new(Path::new(var)),
-                },
+            Ok(ExprNode {
                 span,
-            ))
+                kind: ExprNodeKind::Let {
+                    value: Box::new(expr),
+                    bind: LocalNode {
+                        name,
+                        span: local_span,
+                    },
+                },
+            })
         } else {
             Ok(expr)
         }
     }
 
-    fn expr(&mut self) -> Result<Expr> {
+    fn expr(&mut self) -> Result<ExprNode> {
         let start = self.start_span();
 
         let mut expr = self.term()?;
@@ -337,39 +349,47 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             let right = self.term()?;
 
             let span = self.end_span(start);
-            expr = Expr::new(
-                ExprKind::Binary {
+            expr = ExprNode {
+                span,
+                kind: ExprNodeKind::Binary {
                     op,
                     left: Box::new(expr),
                     right: Box::new(right),
                 },
-                span,
-            );
+            };
         }
         Ok(expr)
     }
 
-    fn term(&mut self) -> Result<Expr> {
+    fn term(&mut self) -> Result<ExprNode> {
         let mut expr = if let Some(&TokenKind::Quote) = self.peek() {
             let start = self.start_span();
 
+            // skip quote
             self.next();
-            let kind = match self.next() {
+
+            let name_start = self.start_span();
+            let name = self.next();
+            let name_span = self.end_span(name_start);
+
+            let kind = match name {
                 Some(TokenKind::Id(name)) => {
-                    let name = Name::new(name);
                     let args = self.args()?;
-                    ExprKind::Function {
-                        func: Func::new(Path::new(name)),
+                    ExprNodeKind::Function {
+                        func: FuncRef {
+                            path: Path { name },
+                            span: name_span,
+                        },
                         args,
                     }
                 }
                 Some(TokenKind::Type(name)) => {
-                    let name = Name::new(name);
                     let args = self.args()?;
-                    ExprKind::Construct {
-                        tp: Type::new(TypeKind::Named {
-                            path: Path::new(name),
-                        }),
+                    ExprNodeKind::Construct {
+                        tp: TypeRef {
+                            path: Path { name },
+                            span: name_span,
+                        },
                         args,
                     }
                 }
@@ -382,7 +402,7 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             };
 
             let span = self.end_span(start);
-            Expr::new(kind, span)
+            ExprNode { span, kind }
         } else {
             self.factor()?
         };
@@ -391,22 +411,27 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             let start = self.start_span();
 
             self.next();
-            let name = Name::new(expect_value!(self, Id));
+            let mem = {
+                let start = self.start_span();
+                let name = expect_value!(self, Id);
+                let span = self.end_span(start);
+                MemberRef { name, span }
+            };
 
             let span = self.end_span(start);
-            expr = Expr::new(
-                ExprKind::Member {
-                    value: Box::new(expr),
-                    mem: Member::new(Path::new(name)),
-                },
+            expr = ExprNode {
                 span,
-            );
+                kind: ExprNodeKind::Member {
+                    value: Box::new(expr),
+                    mem,
+                },
+            };
         }
 
         Ok(expr)
     }
 
-    fn args(&mut self) -> Result<Vec<Expr>> {
+    fn args(&mut self) -> Result<Vec<ExprNode>> {
         let mut args = Vec::new();
         loop {
             // TODO: remove ugly duplicate code
@@ -423,15 +448,20 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         Ok(args)
     }
 
-    fn factor(&mut self) -> Result<Expr> {
+    fn factor(&mut self) -> Result<ExprNode> {
         let start = self.start_span();
 
         let kind = match self.next() {
             Some(TokenKind::Id(name)) => {
-                let name = Name::new(name);
-                ExprKind::Id(Bind::new(Path::new(name)))
+                let span = self.end_span(start);
+                ExprNodeKind::Id {
+                    bind: BindRef {
+                        path: Path { name },
+                        span,
+                    },
+                }
             }
-            Some(TokenKind::Int(val)) => ExprKind::Int(val),
+            Some(TokenKind::Int(value)) => ExprNodeKind::Int { value },
             Some(TokenKind::If) => {
                 let cond = self.cond()?;
                 expect!(self, Period);
@@ -451,10 +481,10 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         };
 
         let span = self.end_span(start);
-        Ok(Expr::new(kind, span))
+        Ok(ExprNode { span, kind })
     }
 
-    fn cond(&mut self) -> Result<Expr> {
+    fn cond(&mut self) -> Result<ExprNode> {
         let start = self.start_span();
 
         let cond = self.block()?;
@@ -473,19 +503,33 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             }
             _ => {
                 let end = self.span.end;
-                Expr::new(ExprKind::Noop, Span::new(end, end))
+                ExprNode {
+                    kind: ExprNodeKind::Noop,
+                    span: Span::new(end, end),
+                }
             }
         };
 
         let span = self.end_span(start);
-        Ok(Expr::new(
-            ExprKind::If {
+        Ok(ExprNode {
+            span,
+            kind: ExprNodeKind::If {
                 cond: Box::new(cond),
                 succ: Box::new(succ),
                 fail: Box::new(fail),
             },
+        })
+    }
+
+    fn tp(&mut self) -> Result<TypeRef> {
+        let start = self.start_span();
+        let name = expect_value!(self, Type);
+        let span = self.end_span(start);
+
+        Ok(TypeRef {
+            path: Path { name },
             span,
-        ))
+        })
     }
 
     fn start_span(&mut self) -> Option<Pos> {
@@ -512,16 +556,9 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
     fn error<T>(&self, kind: ErrorKind) -> Result<T> {
         Err(Error {
-            kind,
             span: self.span,
+            kind,
         })
-    }
-
-    fn tp(&mut self) -> Result<Type> {
-        let name = Name::new(expect_value!(self, Type));
-        Ok(Type::new(TypeKind::Named {
-            path: Path::new(name),
-        }))
     }
 }
 

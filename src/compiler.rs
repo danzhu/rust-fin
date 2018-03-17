@@ -4,8 +4,7 @@ use error::*;
 use ctx::*;
 
 use parser;
-use name_res;
-use type_chk;
+use ast_gen;
 use ir_gen;
 use code_gen;
 
@@ -16,8 +15,7 @@ pub struct Compiler {
 pub enum Error {
     Io(io::Error),
     Parser(parser::Error),
-    NameRes(name_res::Error),
-    TypeChecker(type_chk::Error),
+    AstGen(ast_gen::Error),
     CodeGen(code_gen::Error),
 }
 
@@ -35,15 +33,9 @@ impl From<parser::Error> for Error {
     }
 }
 
-impl From<name_res::Error> for Error {
-    fn from(err: name_res::Error) -> Error {
-        Error::NameRes(err)
-    }
-}
-
-impl From<type_chk::Error> for Error {
-    fn from(err: type_chk::Error) -> Error {
-        Error::TypeChecker(err)
+impl From<ast_gen::Error> for Error {
+    fn from(err: ast_gen::Error) -> Error {
+        Error::AstGen(err)
     }
 }
 
@@ -70,8 +62,7 @@ impl Compiler {
         input.read_to_string(&mut content)?;
 
         parser::parse(filename, &content, &mut self.ctx)?;
-        name_res::resolve(&mut self.ctx)?;
-        type_chk::type_check(&mut self.ctx)?;
+        ast_gen::gen(&mut self.ctx)?;
         ir_gen::generate(&mut self.ctx);
 
         self.ctx
@@ -90,8 +81,7 @@ impl Compiler {
         match *err {
             Error::Io(ref err) => write!(output, "{}", err),
             Error::Parser(ref err) => err.print(output, &self.ctx),
-            Error::NameRes(ref err) => err.print(output, &self.ctx),
-            Error::TypeChecker(ref err) => err.print(output, &self.ctx),
+            Error::AstGen(ref err) => err.print(output, &self.ctx),
             Error::CodeGen(ref err) => write!(output, "{}", err),
         }
     }

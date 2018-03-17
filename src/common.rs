@@ -1,6 +1,5 @@
 use std::{fmt, ops, slice, usize};
 
-use def::*;
 use ctx::*;
 
 pub const INDENT: &str = "  ";
@@ -42,51 +41,25 @@ pub enum CompOp {
 }
 
 #[derive(Clone)]
+pub struct Path {
+    pub name: Name,
+}
+
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+pub type Name = String;
+
+#[derive(Clone)]
 pub struct List<T> {
     items: Vec<T>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Index(usize);
-
-#[derive(Clone, PartialEq, Eq)]
-pub struct Type {
-    pub kind: TypeKind,
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub enum TypeKind {
-    Named { path: Path },
-    Void,
-    Unknown,
-}
-
-#[derive(Clone)]
-pub struct Func {
-    pub path: Path,
-}
-
-#[derive(Clone)]
-pub struct Member {
-    pub path: Path,
-}
-
-#[derive(Clone)]
-pub struct Bind {
-    pub path: Path,
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub enum Path {
-    Unresolved(Name),
-    Resolved(Index),
-}
-
-// TODO: remove Eq and add custom impl for Path
-#[derive(Clone, PartialEq, Eq)]
-pub struct Name {
-    pub name: String,
-}
 
 impl Span {
     pub fn new(start: Pos, end: Pos) -> Self {
@@ -140,6 +113,10 @@ impl<T> List<T> {
 
     pub fn len(&self) -> usize {
         self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
     }
 
     pub fn push(&mut self, item: T) -> Index {
@@ -208,110 +185,5 @@ impl Index {
 impl fmt::Display for Index {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl Type {
-    pub fn new(kind: TypeKind) -> Self {
-        Self { kind }
-    }
-
-    pub fn path(&self) -> &Path {
-        match self.kind {
-            TypeKind::Named { ref path } => path,
-            TypeKind::Void | TypeKind::Unknown => panic!("type with no path"),
-        }
-    }
-
-    pub fn format(&self, ctx: &Context) -> String {
-        match self.kind {
-            TypeKind::Named {
-                path: Path::Unresolved(ref name),
-            } => format!("{}", name),
-            TypeKind::Named {
-                path: Path::Resolved(idx),
-            } => format!("{}", ctx.type_defs[idx].name),
-            TypeKind::Void => "Void".to_string(),
-            TypeKind::Unknown => "Unknown".to_string(),
-        }
-    }
-}
-
-impl Default for Type {
-    fn default() -> Self {
-        Type {
-            kind: TypeKind::Unknown,
-        }
-    }
-}
-
-impl Func {
-    pub fn new(path: Path) -> Self {
-        Self { path }
-    }
-
-    pub fn format(&self, ctx: &Context) -> String {
-        match self.path {
-            Path::Unresolved(ref name) => format!("{}", name),
-            Path::Resolved(idx) => format!("{}", ctx.func_defs[idx].name),
-        }
-    }
-}
-
-impl Member {
-    pub fn new(path: Path) -> Self {
-        Self { path }
-    }
-
-    pub fn format(&self, ctx: &Context, tp: &Type) -> String {
-        match self.path {
-            Path::Unresolved(ref name) => format!("{}", name),
-            Path::Resolved(idx) => format!("{}", ctx.get_type(tp).fields()[idx.value()].name),
-        }
-    }
-}
-
-impl Bind {
-    pub fn new(path: Path) -> Self {
-        Self { path }
-    }
-
-    pub fn format(&self, _ctx: &Context, func: &FuncDef) -> String {
-        match self.path {
-            Path::Unresolved(ref name) => format!("{}", name),
-            Path::Resolved(idx) => format!("{}", func.locals[idx].name),
-        }
-    }
-}
-
-impl Path {
-    pub fn new(name: Name) -> Self {
-        Path::Unresolved(name)
-    }
-
-    pub fn name(&self) -> &Name {
-        match *self {
-            Path::Unresolved(ref name) => name,
-            Path::Resolved(_) => panic!("calling name on resolved path"),
-        }
-    }
-
-    pub fn index(&self) -> Index {
-        match *self {
-            Path::Unresolved(_) => panic!("calling index on unresolved path"),
-            Path::Resolved(idx) => idx,
-        }
-    }
-}
-
-impl Name {
-    pub fn new(name: String) -> Self {
-        Name { name }
-    }
-}
-
-impl fmt::Display for Name {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.name)
     }
 }

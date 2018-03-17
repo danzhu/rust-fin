@@ -2,20 +2,24 @@ use std::io;
 use std::collections::HashMap;
 
 use common::*;
-use def::*;
+use error::*;
+use ptree::*;
+use ast::*;
 use ir::*;
 
-#[derive(Default)]
 pub struct Context {
-    pub sources: List<Source>,
+    pub sources: List<SourceNode>,
 
     pub type_defs: List<TypeDef>,
     pub func_defs: List<FuncDef>,
+
+    pub bodies: List<Body>,
 
     pub irs: List<Ir>,
 
     pub sym_table: HashMap<String, Symbol>,
 
+    pub type_void: Type,
     pub type_int: Type,
     pub type_bool: Type,
 }
@@ -26,16 +30,37 @@ impl Context {
             ($ctx:expr, $src:expr, $name:ident) => {{
                 let span = Span::zero($src);
                 let kind = TypeDefKind::Builtin(BuiltinType::$name);
-                let tp = TypeDef::new(stringify!($name), span, kind);
-                let idx = $ctx.type_defs.push(tp);
-                let path = Path::Resolved(idx);
-                Type::new(TypeKind::Named { path })
+                let name = stringify!($name).to_string();
+                let path = Path { name: name.clone() };
+                let tp = TypeDef { path, span, kind };
+                let index = $ctx.type_defs.push(tp);
+                $ctx.sym_table.insert(name, Symbol::Type(index));
+                Type { kind: TypeKind::Named { index } }
             }}
         }
 
-        let mut ctx: Context = Default::default();
+        let type_void = Type {
+            kind: TypeKind::Void,
+        };
 
-        let src = ctx.sources.push(Source::new("<builtin>", ""));
+        let mut ctx: Context = Context {
+            sources: List::new(),
+            type_defs: List::new(),
+            func_defs: List::new(),
+            bodies: List::new(),
+            irs: List::new(),
+            sym_table: HashMap::new(),
+            type_void: type_void.clone(),
+            // HACK: we need to create the context before we call methods
+            type_int: type_void.clone(),
+            type_bool: type_void.clone(),
+        };
+
+        let src = ctx.sources.push(SourceNode {
+            filename: "<builtin>".to_string(),
+            lines: Vec::new(),
+            items: Vec::new(),
+        });
 
         ctx.type_int = define_tp!(ctx, src, Int);
         ctx.type_bool = define_tp!(ctx, src, Bool);
@@ -43,16 +68,19 @@ impl Context {
         ctx
     }
 
-    pub fn get_sym(&self, name: &Name) -> Option<Symbol> {
-        self.sym_table.get(&name.name).cloned()
+    pub fn get_sym(&self, name: &str) -> Option<Symbol> {
+        self.sym_table.get(name).cloned()
     }
 
     pub fn get_type(&self, tp: &Type) -> &TypeDef {
-        &self.type_defs[tp.path().index()]
+        match tp.kind {
+            TypeKind::Named { index } => &self.type_defs[index],
+            TypeKind::Void => panic!("void has no type def"),
+        }
     }
 
     pub fn get_func(&self, func: &Func) -> &FuncDef {
-        &self.func_defs[func.path.index()]
+        &self.func_defs[func.index]
     }
 
     pub fn print<Out>(&self, f: &mut Out) -> io::Result<()>
@@ -68,5 +96,20 @@ impl Context {
             writeln!(f)?;
         }
         Ok(())
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum Symbol {
+    Type(Index),
+    Func(Index),
+}
+
+impl Symbol {
+    pub fn format(&self, ctx: &Context) -> String {
+        match *self {
+            Symbol::Type(idx) => format!("type {}", ctx.type_defs[idx].path),
+            Symbol::Func(idx) => format!("function {}", ctx.func_defs[idx].path),
+        }
     }
 }
