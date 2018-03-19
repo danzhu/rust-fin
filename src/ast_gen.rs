@@ -101,16 +101,17 @@ fn define_types(ctx: &mut Context) -> Result<()> {
 
 fn declare_funcs(ctx: &mut Context) -> Result<()> {
     for item in ctx.sources.iter().flat_map(|src| &src.items) {
-        let func = match *item {
-            ItemNode::Func(ref func) => func,
+        let sig = match *item {
+            ItemNode::Func(ref func) => &func.sig,
+            ItemNode::Extern(ref sig) => sig,
             _ => continue,
         };
 
         let path = Path {
-            name: func.name.clone(),
+            name: sig.name.clone(),
         };
-        let params = convert_binds(&func.params, ctx)?;
-        let ret = match func.ret {
+        let params = convert_binds(&sig.params, ctx)?;
+        let ret = match sig.ret {
             RetRef::Named(ref tp) => resolve_type(tp, ctx)?,
             RetRef::Void => ctx.type_void.clone(),
         };
@@ -118,7 +119,7 @@ fn declare_funcs(ctx: &mut Context) -> Result<()> {
             path,
             params,
             ret,
-            span: func.span,
+            span: sig.span,
             body: None,
             ir: None,
         };
@@ -136,7 +137,7 @@ fn define_funcs(ctx: &mut Context) -> Result<()> {
         };
 
         let body = {
-            let def = match ctx.sym_table[&func.name] {
+            let def = match ctx.sym_table[&func.sig.name] {
                 Symbol::Func(idx) => &ctx.func_defs[idx],
                 _ => panic!("symbol no longer a func"),
             };
@@ -147,15 +148,11 @@ fn define_funcs(ctx: &mut Context) -> Result<()> {
                 func: def,
                 locals: List::new(),
             };
-            let expr = res.resolve(func)?;
-            Body {
-                expr,
-                locals: res.locals,
-            }
+            res.resolve(func)?
         };
 
         // TODO: find a way to avoid this second lookup
-        let mut def = match ctx.sym_table[&func.name] {
+        let mut def = match ctx.sym_table[&func.sig.name] {
             Symbol::Func(idx) => &mut ctx.func_defs[idx],
             _ => panic!("symbol no longer a func"),
         };
@@ -201,9 +198,9 @@ struct Resolver<'a> {
 }
 
 impl<'a> Resolver<'a> {
-    fn resolve(&mut self, func: &FuncNode) -> Result<Expr> {
+    fn resolve(mut self, func: &FuncNode) -> Result<Body> {
         let mut syms = SymTable::root(self.refs);
-        for (i, param) in &mut func.params.iter().enumerate() {
+        for (i, param) in &mut func.sig.params.iter().enumerate() {
             let index = Index::new(i);
             syms.add(
                 param.name.clone(),
@@ -213,7 +210,14 @@ impl<'a> Resolver<'a> {
             );
         }
 
-        self.resolve_expr(&func.body, &mut syms)
+        let expr = self.resolve_expr(&func.body, &mut syms)?;
+
+        expect_tp(&self.func.ret, &expr.tp, expr.span)?;
+
+        Ok(Body {
+            expr,
+            locals: self.locals,
+        })
     }
 
     fn resolve_expr(&mut self, expr: &ExprNode, syms: &mut SymTable) -> Result<Expr> {

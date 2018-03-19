@@ -21,13 +21,15 @@ pub fn generate(ctx: &mut Context) {
             gen.ir.params.push(reg);
         }
 
-        let body = &ctx.bodies[func.body.expect("no body")];
+        if let Some(body) = func.body {
+            let body = &ctx.bodies[body];
 
-        let res = gen.gen_expr(&body.expr, &mut block);
-        gen.ir.end(block, Term::Ret(res));
+            let res = gen.gen_expr(&body.expr, &mut block);
+            gen.ir.end(block, Term::Ret(res));
 
-        let idx = ctx.irs.push(gen.ir);
-        func.ir = Some(idx);
+            let idx = ctx.irs.push(gen.ir);
+            func.ir = Some(idx);
+        }
     }
 }
 

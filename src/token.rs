@@ -17,6 +17,7 @@ impl Token {
 #[derive(Clone)]
 pub enum TokenKind {
     Def,
+    Extern,
     Struct,
     As,
     If,
@@ -41,6 +42,7 @@ impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             TokenKind::Def => write!(f, "def"),
+            TokenKind::Extern => write!(f, "extern"),
             TokenKind::Struct => write!(f, "struct"),
             TokenKind::As => write!(f, "as"),
             TokenKind::If => write!(f, "if"),

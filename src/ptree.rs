@@ -11,6 +11,7 @@ pub struct SourceNode {
 pub enum ItemNode {
     Type(TypeNode),
     Func(FuncNode),
+    Extern(SigNode),
 }
 
 #[derive(Clone)]
@@ -27,10 +28,16 @@ pub enum TypeNodeKind {
 
 #[derive(Clone)]
 pub struct FuncNode {
+    pub sig: SigNode,
+    pub body: ExprNode,
+    pub span: Span,
+}
+
+#[derive(Clone)]
+pub struct SigNode {
     pub name: Name,
     pub params: Vec<BindNode>,
     pub ret: RetRef,
-    pub body: ExprNode,
     pub span: Span,
 }
 

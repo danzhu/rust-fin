@@ -54,29 +54,7 @@ pub fn parse(filename: String, content: &str, ctx: &mut Context) -> Result<()> {
         span: Span::zero(idx),
     };
 
-    let mut items = Vec::new();
-
-    while par.peek().is_some() {
-        let item = match par.next() {
-            Some(TokenKind::Struct) => {
-                let def = par.structure()?;
-                ItemNode::Type(def)
-            }
-            Some(TokenKind::Def) => {
-                let def = par.func()?;
-                ItemNode::Func(def)
-            }
-            got => {
-                return par.error(ErrorKind::Expect {
-                    expect: "top-level definition",
-                    got,
-                })
-            }
-        };
-        items.push(item);
-    }
-
-    ctx.sources[idx].items = items;
+    ctx.sources[idx].items = par.parse()?;
     Ok(())
 }
 
@@ -166,6 +144,7 @@ where
 
             match val.as_ref() {
                 "def" => TokenKind::Def,
+                "extern" => TokenKind::Extern,
                 "struct" => TokenKind::Struct,
                 "as" => TokenKind::As,
                 "if" => TokenKind::If,
@@ -230,6 +209,36 @@ struct Parser<Iter: Iterator<Item = Token>> {
 }
 
 impl<Iter: Iterator<Item = Token>> Parser<Iter> {
+    fn parse(&mut self) -> Result<Vec<ItemNode>> {
+        let mut items = Vec::new();
+
+        while self.peek().is_some() {
+            let item = match self.next() {
+                Some(TokenKind::Struct) => {
+                    let def = self.structure()?;
+                    ItemNode::Type(def)
+                }
+                Some(TokenKind::Def) => {
+                    let def = self.func()?;
+                    ItemNode::Func(def)
+                }
+                Some(TokenKind::Extern) => {
+                    let decl = self.sig()?;
+                    ItemNode::Extern(decl)
+                }
+                got => {
+                    return self.error(ErrorKind::Expect {
+                        expect: "top-level definition",
+                        got,
+                    })
+                }
+            };
+            items.push(item);
+        }
+
+        Ok(items)
+    }
+
     fn structure(&mut self) -> Result<TypeNode> {
         let start = self.start_span();
         let name = expect_value!(self, Type);
@@ -248,6 +257,20 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
 
     fn func(&mut self) -> Result<FuncNode> {
         let start = self.start_span();
+        let sig = self.sig()?;
+        let span = self.end_span(start);
+
+        expect!(self, As);
+
+        let body = self.block()?;
+
+        expect!(self, Period);
+
+        Ok(FuncNode { sig, body, span })
+    }
+
+    fn sig(&mut self) -> Result<SigNode> {
+        let start = self.start_span();
         let name = expect_value!(self, Bind);
         let span = self.end_span(start);
 
@@ -260,17 +283,10 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
             RetRef::Void
         };
 
-        expect!(self, As);
-
-        let body = self.block()?;
-
-        expect!(self, Period);
-
-        Ok(FuncNode {
+        Ok(SigNode {
             name,
             params,
             ret,
-            body,
             span,
         })
     }

@@ -51,37 +51,28 @@ pub fn generate<Out>(ctx: &Context, mut output: Out) -> Result<()>
 where
     Out: io::Write,
 {
-    let mut first = true;
     for tp in &ctx.type_defs {
-        if first {
-            first = false;
-        } else {
-            writeln!(&mut output)?;
-        }
-
         gen_type(ctx, tp, &mut output)?;
     }
 
     for func in &ctx.func_defs {
-        if first {
-            first = false;
+        if let Some(ir) = func.ir {
+            let ir = &ctx.irs[ir];
+
+            let blocks = alloc_values(ctx, func, ir);
+
+            let mut gen = FuncGen {
+                output: &mut output,
+                ctx,
+                func,
+                ir,
+                blocks: &blocks,
+                temp: 0,
+            };
+            gen.gen()?;
         } else {
-            writeln!(&mut output)?;
+            gen_extern(ctx, func, &mut output)?;
         }
-
-        let ir = &ctx.irs[func.ir.expect("ir not generated")];
-
-        let blocks = alloc_values(ctx, func, ir);
-
-        let mut gen = FuncGen {
-            output: &mut output,
-            ctx,
-            func,
-            ir,
-            blocks: &blocks,
-            temp: 0,
-        };
-        gen.gen()?;
     }
     Ok(())
 }
@@ -136,7 +127,6 @@ fn gen_type<Out>(ctx: &Context, tp: &TypeDef, output: &mut Out) -> Result<()>
 where
     Out: io::Write,
 {
-    writeln!(output, "; Type {}", tp.path)?;
     match tp.kind {
         TypeDefKind::Struct { ref fields, .. } => {
             let name = typedef_name(tp);
@@ -155,6 +145,7 @@ where
             }
 
             writeln!(output, " }}")?;
+            writeln!(output)?;
         }
         TypeDefKind::Builtin(_) => {}
         TypeDefKind::Opaque => panic!("generating opaque type"),
@@ -162,33 +153,18 @@ where
     Ok(())
 }
 
-fn type_name(ctx: &Context, tp: &Type) -> Value {
-    match tp.kind {
-        TypeKind::Named { index } => {
-            let def = &ctx.type_defs[index];
-            typedef_name(def)
-        }
-        TypeKind::Void => Value::Builtin("void"),
-    }
-}
+fn gen_extern<Out>(ctx: &Context, func: &FuncDef, output: &mut Out) -> Result<()>
+where
+    Out: io::Write,
+{
+    write!(output, "declare ")?;
 
-fn typedef_name(tp: &TypeDef) -> Value {
-    match tp.kind {
-        TypeDefKind::Struct { .. } => Value::Type(tp.path.clone()),
-        TypeDefKind::Builtin(ref tp) => Value::Builtin(match *tp {
-            BuiltinType::Int => "i32",
-            BuiltinType::Bool => "i1",
-        }),
-        TypeDefKind::Opaque => panic!("getting name of opaque type"),
-    }
-}
+    gen_sig(ctx, func, output)?;
 
-fn funcdef_name(func: &FuncDef) -> Value {
-    Value::Func(func.path.clone())
-}
+    writeln!(output)?;
+    writeln!(output)?;
 
-fn param_name(param: &BindDef) -> Value {
-    Value::Param(param.name.clone())
+    Ok(())
 }
 
 impl<'a, Out> FuncGen<'a, Out>
@@ -196,26 +172,11 @@ where
     Out: io::Write,
 {
     fn gen(&mut self) -> Result<()> {
-        let name = funcdef_name(self.func);
-        let ret = type_name(self.ctx, &self.func.ret);
+        write!(self.output, "define ")?;
 
-        writeln!(self.output, "; Func {}", self.func.path)?;
-        write!(self.output, "define {} {}(", ret, name)?;
+        gen_sig(self.ctx, self.func, self.output)?;
 
-        let mut first = true;
-        for param in &self.func.params {
-            if first {
-                first = false;
-            } else {
-                write!(self.output, ", ")?;
-            }
-
-            let tp = type_name(self.ctx, &param.tp);
-            let param = param_name(param);
-            write!(self.output, "{} {}", tp, param)?;
-        }
-
-        writeln!(self.output, ") {{")?;
+        writeln!(self.output, "{{")?;
 
         let mut first = true;
         for (block, vals) in self.ir.blocks.iter().zip(self.blocks) {
@@ -229,6 +190,7 @@ where
         }
 
         writeln!(self.output, "}}")?;
+        writeln!(self.output)?;
         Ok(())
     }
 
@@ -411,6 +373,62 @@ where
     fn reg_type(&self, reg: Reg) -> Value {
         type_name(self.ctx, &self.ir.get(reg).tp)
     }
+}
+
+fn gen_sig<Out>(ctx: &Context, func: &FuncDef, output: &mut Out) -> Result<()>
+where
+    Out: io::Write,
+{
+    let name = funcdef_name(func);
+    let ret = type_name(ctx, &func.ret);
+
+    write!(output, "{} {}(", ret, name)?;
+
+    let mut first = true;
+    for param in &func.params {
+        if first {
+            first = false;
+        } else {
+            write!(output, ", ")?;
+        }
+
+        let tp = type_name(ctx, &param.tp);
+        let param = param_name(param);
+        write!(output, "{} {}", tp, param)?;
+    }
+
+    write!(output, ")")?;
+
+    Ok(())
+}
+
+fn type_name(ctx: &Context, tp: &Type) -> Value {
+    match tp.kind {
+        TypeKind::Named { index } => {
+            let def = &ctx.type_defs[index];
+            typedef_name(def)
+        }
+        TypeKind::Void => Value::Builtin("void"),
+    }
+}
+
+fn typedef_name(tp: &TypeDef) -> Value {
+    match tp.kind {
+        TypeDefKind::Struct { .. } => Value::Type(tp.path.clone()),
+        TypeDefKind::Builtin(ref tp) => Value::Builtin(match *tp {
+            BuiltinType::Int => "i32",
+            BuiltinType::Bool => "i1",
+        }),
+        TypeDefKind::Opaque => panic!("getting name of opaque type"),
+    }
+}
+
+fn funcdef_name(func: &FuncDef) -> Value {
+    Value::Func(func.path.clone())
+}
+
+fn param_name(param: &BindDef) -> Value {
+    Value::Param(param.name.clone())
 }
 
 impl fmt::Display for Label {
