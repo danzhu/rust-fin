@@ -104,15 +104,26 @@ where
                 writeln!(self.output, "; locals")?;
                 for (idx, local) in self.ir.locals.iter().enumerate() {
                     let tp = type_name(self.ctx, &local.tp);
-                    writeln!(self.output, "{}{} = alloca {}", INDENT, Value::Local(idx), tp)?;
+                    writeln!(
+                        self.output,
+                        "{}{} = alloca {}",
+                        INDENT,
+                        Value::Local(idx),
+                        tp
+                    )?;
                 }
 
                 writeln!(self.output, "; params")?;
                 for (idx, param) in self.func.params.iter().enumerate() {
                     let tp = type_name(self.ctx, &param.tp);
-                    writeln!(self.output,
-                             "{}store {} {}, {}* {}",
-                             INDENT, tp, Value::Param(idx), tp, Value::Local(idx),
+                    writeln!(
+                        self.output,
+                        "{}store {} {}, {}* {}",
+                        INDENT,
+                        tp,
+                        Value::Param(idx),
+                        tp,
+                        Value::Local(idx),
                     )?;
                 }
 
@@ -143,7 +154,12 @@ where
                 let val = self.load(value)?;
                 self.store(val, dest)?;
             }
-            StmtKind::Binary { dest, op, left, right } => {
+            StmtKind::Binary {
+                dest,
+                op,
+                left,
+                right,
+            } => {
                 let op = match op {
                     Op::Arith(op) => match op {
                         ArithOp::Add => "add",
@@ -169,7 +185,11 @@ where
                 let val = self.write(format_args!("{} {} {}, {}", op, tp, left, right))?;
                 self.store(val, dest)?;
             }
-            StmtKind::Construct { dest, ref tp, ref args } => {
+            StmtKind::Construct {
+                dest,
+                ref tp,
+                ref args,
+            } => {
                 let dest = self.addr(dest);
                 let tp = type_name(self.ctx, tp);
 
@@ -180,10 +200,17 @@ where
                         "getelementptr {}, {}* {}, i64 0, i32 {}",
                         tp, tp, dest, idx
                     ))?;
-                    self.exec(format_args!("store {} {}, {}* {}", arg_tp, arg, arg_tp, field))?;
+                    self.exec(format_args!(
+                        "store {} {}, {}* {}",
+                        arg_tp, arg, arg_tp, field
+                    ))?;
                 }
             }
-            StmtKind::Call { dest, ref func, ref args } => {
+            StmtKind::Call {
+                dest,
+                ref func,
+                ref args,
+            } => {
                 let func = &self.ctx.get_func(func);
                 let name = funcdef_name(func);
                 let tp = type_name(self.ctx, &func.ret);
@@ -197,18 +224,19 @@ where
                     .collect::<Result<Vec<_>>>()?;
 
                 if let Some(dest) = dest {
-                    let val = self.write(format_args!(
-                        "call {} {}({})",
-                        tp, name, args.join(", ")))?;
+                    let val =
+                        self.write(format_args!("call {} {}({})", tp, name, args.join(", ")))?;
 
                     self.store(val, dest)?;
                 } else {
-                    self.exec(format_args!(
-                        "call {} {}({})",
-                        tp, name, args.join(", ")))?;
+                    self.exec(format_args!("call {} {}({})", tp, name, args.join(", ")))?;
                 }
             }
-            StmtKind::Member { dest, value, ref mem } => {
+            StmtKind::Member {
+                dest,
+                value,
+                ref mem,
+            } => {
                 let mem_tp = self.reg_type(dest);
                 let idx = mem.index.value();
                 let tp = self.reg_type(value);
@@ -218,18 +246,13 @@ where
                     tp, tp, value, idx
                 ))?;
 
-                let val = self.write(format_args!(
-                    "load {}, {}* {}",
-                    mem_tp, mem_tp, field))?;
+                let val = self.write(format_args!("load {}, {}* {}", mem_tp, mem_tp, field))?;
                 self.store(val, dest)?;
             }
             StmtKind::Int { dest, value } => {
                 let tp = self.reg_type(dest);
                 let dest = self.addr(dest);
-                self.exec(format_args!(
-                    "store {} {}, {}* {}",
-                    tp, value, tp, dest
-                ))?;
+                self.exec(format_args!("store {} {}, {}* {}", tp, value, tp, dest))?;
             }
         }
         Ok(())
@@ -257,13 +280,13 @@ where
 
                 self.exec(format_args!("br label {}", block))?;
             }
-            TermKind::Ret{ value: Some(value) } => {
+            TermKind::Ret { value: Some(value) } => {
                 let tp = self.reg_type(value);
                 let value = self.load(value)?;
 
                 self.exec(format_args!("ret {} {}", tp, value))?;
             }
-            TermKind::Ret{ value: None } => {
+            TermKind::Ret { value: None } => {
                 self.exec(format_args!("ret void"))?;
             }
             TermKind::Unreachable => {
@@ -275,9 +298,7 @@ where
 
     fn addr(&mut self, reg: Reg) -> Value {
         match reg {
-            Reg::Local(idx) => {
-                Value::Local(idx.value())
-            }
+            Reg::Local(idx) => Value::Local(idx.value()),
         }
     }
 
@@ -288,7 +309,9 @@ where
                 let tp = type_name(self.ctx, &local.tp);
                 self.write(format_args!(
                     "load {}, {}* {}",
-                    tp, tp, Value::Local(idx.value()),
+                    tp,
+                    tp,
+                    Value::Local(idx.value()),
                 ))
             }
         }
@@ -301,7 +324,10 @@ where
                 let tp = type_name(self.ctx, &local.tp);
                 self.exec(format_args!(
                     "store {} {}, {}* {}",
-                    tp, val, tp, Value::Local(idx.value()),
+                    tp,
+                    val,
+                    tp,
+                    Value::Local(idx.value()),
                 ))
             }
         }

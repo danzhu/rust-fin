@@ -7,27 +7,31 @@ use ptree::*;
 use ctx::*;
 
 macro_rules! expect {
-    ($self:expr, $pat:ident) => {
+    ($self: expr, $pat: ident) => {
         match $self.next() {
-            Some(TokenKind::$pat) => {},
-            got => return $self.error(ErrorKind::Expect {
-                expect: stringify!($pat),
-                got
-            }),
+            Some(TokenKind::$pat) => {}
+            got => {
+                return $self.error(ErrorKind::Expect {
+                    expect: stringify!($pat),
+                    got,
+                })
+            }
         }
-    }
+    };
 }
 
 macro_rules! expect_value {
-    ($self:expr, $pat:ident) => {
+    ($self: expr, $pat: ident) => {
         match $self.next() {
             Some(TokenKind::$pat(val)) => val,
-            got => return $self.error(ErrorKind::Expect {
-                expect: stringify!($pat),
-                got
-            }),
+            got => {
+                return $self.error(ErrorKind::Expect {
+                    expect: stringify!($pat),
+                    got,
+                })
+            }
         }
-    }
+    };
 }
 
 pub fn parse(filename: String, content: &str, ctx: &mut Context) -> Result<()> {

@@ -27,7 +27,7 @@ pub struct Context {
 impl Context {
     pub fn new() -> Self {
         macro_rules! define_tp {
-            ($ctx:expr, $src:expr, $name:ident) => {{
+            ($ctx: expr, $src: expr, $name: ident) => {{
                 let span = Span::zero($src);
                 let kind = TypeDefKind::Builtin(BuiltinType::$name);
                 let name = stringify!($name).to_string();
@@ -35,8 +35,10 @@ impl Context {
                 let tp = TypeDef { path, span, kind };
                 let index = $ctx.type_defs.push(tp);
                 $ctx.sym_table.insert(name, Symbol::Type(index));
-                Type { kind: TypeKind::Named { index } }
-            }}
+                Type {
+                    kind: TypeKind::Named { index },
+                }
+            }};
         }
 
         let type_void = Type {

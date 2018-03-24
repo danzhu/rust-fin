@@ -28,12 +28,35 @@ pub struct Stmt {
 
 #[derive(Clone, Debug)]
 pub enum StmtKind {
-    Move { dest: Reg, value: Reg },
-    Binary { dest: Reg, op: Op, left: Reg, right: Reg },
-    Construct { dest: Reg, tp: Type, args: Vec<Reg> },
-    Call { dest: Option<Reg>, func: Func, args: Vec<Reg> },
-    Member { dest: Reg, value: Reg, mem: Member },
-    Int { dest: Reg, value: i32 },
+    Move {
+        dest: Reg,
+        value: Reg,
+    },
+    Binary {
+        dest: Reg,
+        op: Op,
+        left: Reg,
+        right: Reg,
+    },
+    Construct {
+        dest: Reg,
+        tp: Type,
+        args: Vec<Reg>,
+    },
+    Call {
+        dest: Option<Reg>,
+        func: Func,
+        args: Vec<Reg>,
+    },
+    Member {
+        dest: Reg,
+        value: Reg,
+        mem: Member,
+    },
+    Int {
+        dest: Reg,
+        value: i32,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -88,7 +111,9 @@ impl Block {
     pub fn new() -> Self {
         Self {
             stmts: List::new(),
-            term: Term { kind: TermKind::Unreachable },
+            term: Term {
+                kind: TermKind::Unreachable,
+            },
         }
     }
 
@@ -133,23 +158,34 @@ impl StmtKind {
             } => {
                 write!(f, "{} = Binary {} {} {}", dest, op, left, right)?;
             }
-            StmtKind::Construct { dest, ref tp, ref args } => {
+            StmtKind::Construct {
+                dest,
+                ref tp,
+                ref args,
+            } => {
                 write!(f, "{} = Construct {}", dest, tp.format(ctx))?;
                 for arg in args {
                     write!(f, " {}", arg)?;
                 }
             }
-            StmtKind::Call { dest, ref func, ref args } => {
-                match dest {
-                    Some(dest) => write!(f, "{} = ", dest)?,
-                    None => {},
+            StmtKind::Call {
+                dest,
+                ref func,
+                ref args,
+            } => {
+                if let Some(dest) = dest {
+                    write!(f, "{} = ", dest)?;
                 }
                 write!(f, "Call {}", func.format(ctx))?;
                 for arg in args {
                     write!(f, " {}", arg)?;
                 }
             }
-            StmtKind::Member { dest, value, ref mem } => {
+            StmtKind::Member {
+                dest,
+                value,
+                ref mem,
+            } => {
                 write!(f, "{} = Member {} {}", dest, value, mem.format(ctx))?;
             }
             StmtKind::Int { dest, value } => {

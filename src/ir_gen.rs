@@ -19,13 +19,20 @@ pub fn generate(ctx: &mut Context) {
             // generate entry block
             let mut block = gen.ir.push_block();
             for local in &body.locals {
-                let local = Local { tp: local.tp.clone() };
+                let local = Local {
+                    tp: local.tp.clone(),
+                };
                 gen.ir.locals.push(local);
             }
 
             // generate body
             let value = gen.gen_expr(&body.expr, &mut block);
-            gen.ir.end(block, Term { kind: TermKind::Ret { value } });
+            gen.ir.end(
+                block,
+                Term {
+                    kind: TermKind::Ret { value },
+                },
+            );
 
             // store ir
             let idx = ctx.irs.push(gen.ir);
@@ -48,7 +55,10 @@ impl Generator {
                 }
                 self.gen_expr(stmts.last().expect("no statement in block"), block)
             }
-            ExprKind::Let { ref value, ref bind } => {
+            ExprKind::Let {
+                ref value,
+                ref bind,
+            } => {
                 let value = self.gen_expr(value, block).expect(NO_REG);
                 let dest = match bind.kind {
                     BindKind::Local { index } => Reg::Local(index),
@@ -58,36 +68,53 @@ impl Generator {
                 None
             }
             ExprKind::Construct { ref tp, ref args } => {
-                let args = args.iter().map(|arg| self.gen_expr(arg, block).expect(NO_REG)).collect();
+                let args = args.iter()
+                    .map(|arg| self.gen_expr(arg, block).expect(NO_REG))
+                    .collect();
                 let dest = self.temp(&expr.tp);
 
-                self.write(*block, StmtKind::Construct {
-                    dest,
-                    tp: tp.clone(),
-                    args,
-                });
+                self.write(
+                    *block,
+                    StmtKind::Construct {
+                        dest,
+                        tp: tp.clone(),
+                        args,
+                    },
+                );
                 Some(dest)
             }
             ExprKind::Function { ref func, ref args } => {
-                let args = args.iter().map(|arg| self.gen_expr(arg, block).expect(NO_REG)).collect();
-                let dest = if !expr.tp.is_void() { Some(self.temp(&expr.tp)) } else { None };
+                let args = args.iter()
+                    .map(|arg| self.gen_expr(arg, block).expect(NO_REG))
+                    .collect();
+                let dest = if !expr.tp.is_void() {
+                    Some(self.temp(&expr.tp))
+                } else {
+                    None
+                };
 
-                self.write(*block, StmtKind::Call {
-                    dest,
-                    func: func.clone(),
-                    args,
-                });
+                self.write(
+                    *block,
+                    StmtKind::Call {
+                        dest,
+                        func: func.clone(),
+                        args,
+                    },
+                );
                 dest
             }
             ExprKind::Member { ref value, ref mem } => {
                 let value = self.gen_expr(value, block).expect(NO_REG);
                 let dest = self.temp(&expr.tp);
 
-                self.write(*block, StmtKind::Member {
-                    dest,
-                    value,
-                    mem: mem.clone(),
-                });
+                self.write(
+                    *block,
+                    StmtKind::Member {
+                        dest,
+                        value,
+                        mem: mem.clone(),
+                    },
+                );
                 Some(dest)
             }
             ExprKind::Binary {
@@ -99,12 +126,15 @@ impl Generator {
                 let right = self.gen_expr(right, block).expect(NO_REG);
                 let dest = self.temp(&expr.tp);
 
-                self.write(*block, StmtKind::Binary {
-                    dest,
-                    op,
-                    left,
-                    right,
-                });
+                self.write(
+                    *block,
+                    StmtKind::Binary {
+                        dest,
+                        op,
+                        left,
+                        right,
+                    },
+                );
                 Some(dest)
             }
             ExprKind::If {
@@ -137,17 +167,43 @@ impl Generator {
                     // we only move the value to the same register if there is actually a value
                     let dest = self.temp(tp);
 
-                    self.ir.write(succ_block, Stmt { kind: StmtKind::Move { dest, value: succ.expect(NO_REG) }});
+                    self.ir.write(
+                        succ_block,
+                        Stmt {
+                            kind: StmtKind::Move {
+                                dest,
+                                value: succ.expect(NO_REG),
+                            },
+                        },
+                    );
 
-                    self.ir.write(fail_block, Stmt { kind: StmtKind::Move { dest, value: fail.expect(NO_REG) }});
+                    self.ir.write(
+                        fail_block,
+                        Stmt {
+                            kind: StmtKind::Move {
+                                dest,
+                                value: fail.expect(NO_REG),
+                            },
+                        },
+                    );
 
                     Some(dest)
                 } else {
                     None
                 };
 
-                self.ir.end(succ_block, Term { kind: TermKind::Jump { block: end_block } });
-                self.ir.end(fail_block, Term { kind: TermKind::Jump { block: end_block } });
+                self.ir.end(
+                    succ_block,
+                    Term {
+                        kind: TermKind::Jump { block: end_block },
+                    },
+                );
+                self.ir.end(
+                    fail_block,
+                    Term {
+                        kind: TermKind::Jump { block: end_block },
+                    },
+                );
 
                 *block = end_block;
                 dest
@@ -164,10 +220,8 @@ impl Generator {
 
                 self.write(*block, StmtKind::Int { dest, value });
                 Some(dest)
-            },
-            ExprKind::Noop => {
-                None
             }
+            ExprKind::Noop => None,
         }
     }
 
