@@ -4,26 +4,26 @@ use ctx::*;
 
 pub const INDENT: &str = "  ";
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Span {
     pub start: Pos,
     pub end: Pos,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Pos {
     pub file: Index,
     pub line: usize,
     pub column: usize,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Op {
     Arith(ArithOp),
     Comp(CompOp),
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum ArithOp {
     Add,
     Sub,
@@ -32,7 +32,7 @@ pub enum ArithOp {
     Mod,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum CompOp {
     Eq,
     Ne,
@@ -40,7 +40,7 @@ pub enum CompOp {
     Gt,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Path {
     pub name: Name,
 }
@@ -53,12 +53,12 @@ impl fmt::Display for Path {
 
 pub type Name = String;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct List<T> {
     items: Vec<T>,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Index(usize);
 
 impl Span {

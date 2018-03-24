@@ -3,30 +3,31 @@ use ast::*;
 use ir::*;
 use ctx::*;
 
+const NO_REG: &str = "no register";
+
 pub fn generate(ctx: &mut Context) {
     for func in &mut ctx.func_defs {
         let ir = Ir {
-            blocks: List::new(),
-            params: List::new(),
             locals: List::new(),
+            blocks: List::new(),
         };
         let mut gen = Generator { ir };
-
-        // entry block and params
-        let mut block = gen.ir.push_block();
-        for (i, param) in func.params.iter().enumerate() {
-            let idx = Index::new(i);
-            let stmt = Stmt::new(StmtKind::Param(idx), param.tp.clone());
-            let reg = gen.ir.write(block, stmt);
-            gen.ir.params.push(reg);
-        }
 
         if let Some(body) = func.body {
             let body = &ctx.bodies[body];
 
-            let res = gen.gen_expr(&body.expr, &mut block);
-            gen.ir.end(block, Term::Ret(res));
+            // generate entry block
+            let mut block = gen.ir.push_block();
+            for local in &body.locals {
+                let local = Local { tp: local.tp.clone() };
+                gen.ir.locals.push(local);
+            }
 
+            // generate body
+            let value = gen.gen_expr(&body.expr, &mut block);
+            gen.ir.end(block, Term { kind: TermKind::Ret { value } });
+
+            // store ir
             let idx = ctx.irs.push(gen.ir);
             func.ir = Some(idx);
         }
@@ -39,53 +40,72 @@ struct Generator {
 
 impl Generator {
     fn gen_expr(&mut self, expr: &Expr, block: &mut Index) -> Option<Reg> {
-        let kind = match expr.kind {
+        match expr.kind {
             ExprKind::Block { ref stmts } => {
-                let mut reg = None;
-                for stmt in stmts {
-                    reg = self.gen_expr(stmt, block);
+                // TODO: separate last statement in ast
+                for stmt in stmts.iter().take(stmts.len() - 1) {
+                    self.gen_expr(stmt, block);
                 }
-                return reg;
+                self.gen_expr(stmts.last().expect("no statement in block"), block)
             }
-            ExprKind::Let { ref value, .. } => {
-                let reg = self.gen_expr(value, block).unwrap();
-                // TODO: this assumes same visiting order - better solution?
-                self.ir.locals.push(reg);
-                return None;
+            ExprKind::Let { ref value, ref bind } => {
+                let value = self.gen_expr(value, block).expect(NO_REG);
+                let dest = match bind.kind {
+                    BindKind::Local { index } => Reg::Local(index),
+                };
+
+                self.write(*block, StmtKind::Move { dest, value });
+                None
             }
             ExprKind::Construct { ref tp, ref args } => {
-                let args = args.iter()
-                    .map(|arg| self.gen_expr(arg, block).unwrap())
-                    .collect();
-                StmtKind::Construct {
+                let args = args.iter().map(|arg| self.gen_expr(arg, block).expect(NO_REG)).collect();
+                let dest = self.temp(&expr.tp);
+
+                self.write(*block, StmtKind::Construct {
+                    dest,
                     tp: tp.clone(),
                     args,
-                }
+                });
+                Some(dest)
             }
             ExprKind::Function { ref func, ref args } => {
-                let args = args.iter()
-                    .map(|arg| self.gen_expr(arg, block).unwrap())
-                    .collect();
-                StmtKind::Call {
+                let args = args.iter().map(|arg| self.gen_expr(arg, block).expect(NO_REG)).collect();
+                let dest = if !expr.tp.is_void() { Some(self.temp(&expr.tp)) } else { None };
+
+                self.write(*block, StmtKind::Call {
+                    dest,
                     func: func.clone(),
                     args,
-                }
+                });
+                dest
             }
             ExprKind::Member { ref value, ref mem } => {
-                let value = self.gen_expr(value, block).unwrap();
-                StmtKind::Member {
+                let value = self.gen_expr(value, block).expect(NO_REG);
+                let dest = self.temp(&expr.tp);
+
+                self.write(*block, StmtKind::Member {
+                    dest,
                     value,
                     mem: mem.clone(),
-                }
+                });
+                Some(dest)
             }
             ExprKind::Binary {
                 op,
                 ref left,
                 ref right,
             } => {
-                let left = self.gen_expr(left, block).unwrap();
-                let right = self.gen_expr(right, block).unwrap();
-                StmtKind::Binary { op, left, right }
+                let left = self.gen_expr(left, block).expect(NO_REG);
+                let right = self.gen_expr(right, block).expect(NO_REG);
+                let dest = self.temp(&expr.tp);
+
+                self.write(*block, StmtKind::Binary {
+                    dest,
+                    op,
+                    left,
+                    right,
+                });
+                Some(dest)
             }
             ExprKind::If {
                 ref cond,
@@ -96,41 +116,67 @@ impl Generator {
                 let mut fail_block = self.ir.push_block();
                 let end_block = self.ir.push_block();
 
-                let cond = self.gen_expr(cond, block).unwrap();
+                let cond = self.gen_expr(cond, block).expect(NO_REG);
                 self.ir.end(
                     *block,
-                    Term::Br {
-                        cond,
-                        succ: succ_block,
-                        fail: fail_block,
+                    Term {
+                        kind: TermKind::Br {
+                            cond,
+                            succ: succ_block,
+                            fail: fail_block,
+                        },
                     },
                 );
 
-                let succ = self.gen_expr(succ, &mut succ_block).unwrap();
-                self.ir.end(succ_block, Term::Jump(end_block));
+                let tp = &succ.tp;
 
-                let fail = self.gen_expr(fail, &mut fail_block).unwrap();
-                self.ir.end(fail_block, Term::Jump(end_block));
+                let succ = self.gen_expr(succ, &mut succ_block);
+                let fail = self.gen_expr(fail, &mut fail_block);
+
+                let dest = if !tp.is_void() {
+                    // we only move the value to the same register if there is actually a value
+                    let dest = self.temp(tp);
+
+                    self.ir.write(succ_block, Stmt { kind: StmtKind::Move { dest, value: succ.expect(NO_REG) }});
+
+                    self.ir.write(fail_block, Stmt { kind: StmtKind::Move { dest, value: fail.expect(NO_REG) }});
+
+                    Some(dest)
+                } else {
+                    None
+                };
+
+                self.ir.end(succ_block, Term { kind: TermKind::Jump { block: end_block } });
+                self.ir.end(fail_block, Term { kind: TermKind::Jump { block: end_block } });
 
                 *block = end_block;
-                StmtKind::Phi {
-                    values: vec![(succ, succ_block), (fail, fail_block)],
-                }
+                dest
             }
             ExprKind::Bind { ref bind } => {
-                return Some(match bind.kind {
-                    BindKind::Param { index } => self.ir.params[index],
-                    BindKind::Local { index } => self.ir.locals[index],
-                });
-            }
-            ExprKind::Int { value } => StmtKind::Int(value),
-            ExprKind::Noop => {
-                return None;
-            }
-        };
+                let dest = match bind.kind {
+                    BindKind::Local { index } => Reg::Local(index),
+                };
 
-        let stmt = Stmt::new(kind, expr.tp.clone());
-        let reg = self.ir.write(*block, stmt);
-        Some(reg)
+                Some(dest)
+            }
+            ExprKind::Int { value } => {
+                let dest = self.temp(&expr.tp);
+
+                self.write(*block, StmtKind::Int { dest, value });
+                Some(dest)
+            },
+            ExprKind::Noop => {
+                None
+            }
+        }
+    }
+
+    fn write(&mut self, block: Index, kind: StmtKind) {
+        self.ir.write(block, Stmt { kind });
+    }
+
+    fn temp(&mut self, tp: &Type) -> Reg {
+        assert!(!tp.is_void());
+        Reg::Local(self.ir.locals.push(Local { tp: tp.clone() }))
     }
 }

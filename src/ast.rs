@@ -5,7 +5,7 @@ use common::*;
 use error::*;
 use ctx::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TypeDef {
     pub path: Path,
     pub span: Span,
@@ -32,7 +32,7 @@ impl Print for TypeDef {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TypeDefKind {
     Struct {
         fields: List<BindDef>,
@@ -42,7 +42,7 @@ pub enum TypeDefKind {
     Opaque,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BuiltinType {
     Int,
     Bool,
@@ -60,7 +60,7 @@ impl Print for BuiltinType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FuncDef {
     pub path: Path,
     pub params: List<BindDef>,
@@ -89,14 +89,14 @@ impl Print for FuncDef {
         };
 
         if let Some(ir) = self.ir {
-            ctx.irs[ir].print(f, ctx, self)?;
+            ctx.irs[ir].print(f, ctx)?;
         };
 
         Ok(())
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BindDef {
     pub name: Name,
     pub tp: Type,
@@ -109,7 +109,7 @@ impl BindDef {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Body {
     pub expr: Expr,
     pub locals: List<BindDef>,
@@ -128,7 +128,7 @@ impl Body {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Expr {
     pub tp: Type,
     pub span: Span,
@@ -238,7 +238,7 @@ impl Expr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ExprKind {
     Block {
         stmts: Vec<Expr>,
@@ -278,12 +278,19 @@ pub enum ExprKind {
     Noop,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Type {
     pub kind: TypeKind,
 }
 
 impl Type {
+    pub fn is_void(&self) -> bool {
+        match self.kind {
+            TypeKind::Void => true,
+            _ => false,
+        }
+    }
+
     pub fn format(&self, ctx: &Context) -> String {
         match self.kind {
             TypeKind::Named { index } => format!("{}", ctx.type_defs[index].path),
@@ -292,13 +299,13 @@ impl Type {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeKind {
     Named { index: Index },
     Void,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Func {
     pub index: Index,
 }
@@ -309,7 +316,7 @@ impl Func {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Member {
     pub tp: Type,
     pub index: Index,
@@ -327,22 +334,20 @@ impl Member {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Bind {
     pub kind: BindKind,
 }
 
 impl Bind {
-    pub fn format(&self, _ctx: &Context, func: &FuncDef, body: &Body) -> String {
+    pub fn format(&self, _ctx: &Context, _func: &FuncDef, body: &Body) -> String {
         match self.kind {
-            BindKind::Param { index } => format!("{}", func.params[index].name),
             BindKind::Local { index } => format!("{}", body.locals[index].name),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BindKind {
-    Param { index: Index },
     Local { index: Index },
 }

@@ -200,12 +200,17 @@ struct Resolver<'a> {
 impl<'a> Resolver<'a> {
     fn resolve(mut self, func: &FuncNode) -> Result<Body> {
         let mut syms = SymTable::root(self.refs);
-        for (i, param) in &mut func.sig.params.iter().enumerate() {
-            let index = Index::new(i);
+        for param in &func.sig.params {
+            let def = BindDef {
+                name: param.name.clone(),
+                tp: resolve_type(&param.tp, self.refs)?,
+                span: param.span,
+            };
+            let index = self.locals.push(def);
             syms.add(
                 param.name.clone(),
                 Bind {
-                    kind: BindKind::Param { index },
+                    kind: BindKind::Local { index },
                 },
             );
         }
@@ -428,7 +433,6 @@ impl<'a> Resolver<'a> {
                     }
                 };
                 let tp = match bind.kind {
-                    BindKind::Param { index } => self.func.params[index].tp.clone(),
                     BindKind::Local { index } => self.locals[index].tp.clone(),
                 };
                 let kind = ExprKind::Bind { bind };

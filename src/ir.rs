@@ -4,54 +4,59 @@ use common::*;
 use ast::*;
 use ctx::*;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Ir {
+    pub locals: List<Local>,
     pub blocks: List<Block>,
-    pub params: List<Reg>,
-    pub locals: List<Reg>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+pub struct Local {
+    pub tp: Type,
+}
+
+#[derive(Clone, Debug)]
 pub struct Block {
     pub stmts: List<Stmt>,
     pub term: Term,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Stmt {
     pub kind: StmtKind,
-    pub tp: Type,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StmtKind {
-    Phi { values: Vec<(Reg, Index)> },
-    Binary { op: Op, left: Reg, right: Reg },
-    Construct { tp: Type, args: Vec<Reg> },
-    Call { func: Func, args: Vec<Reg> },
-    Member { value: Reg, mem: Member },
-    Param(Index),
-    Int(i32),
+    Move { dest: Reg, value: Reg },
+    Binary { dest: Reg, op: Op, left: Reg, right: Reg },
+    Construct { dest: Reg, tp: Type, args: Vec<Reg> },
+    Call { dest: Option<Reg>, func: Func, args: Vec<Reg> },
+    Member { dest: Reg, value: Reg, mem: Member },
+    Int { dest: Reg, value: i32 },
 }
 
-#[derive(Clone)]
-pub enum Term {
+#[derive(Clone, Debug)]
+pub struct Term {
+    pub kind: TermKind,
+}
+
+#[derive(Clone, Debug)]
+pub enum TermKind {
     Br { cond: Reg, succ: Index, fail: Index },
-    Jump(Index),
-    Ret(Option<Reg>),
+    Jump { block: Index },
+    Ret { value: Option<Reg> },
     Unreachable,
 }
 
-#[derive(Copy, Clone)]
-pub struct Reg {
-    pub block: Index,
-    pub stmt: Index,
+#[derive(Copy, Clone, Debug)]
+pub enum Reg {
+    Local(Index),
 }
 
 impl Ir {
-    pub fn write(&mut self, block: Index, stmt: Stmt) -> Reg {
-        let stmt = self.blocks[block].stmts.push(stmt);
-        Reg { block, stmt }
+    pub fn write(&mut self, block: Index, stmt: Stmt) {
+        self.blocks[block].stmts.push(stmt);
     }
 
     pub fn end(&mut self, block: Index, term: Term) {
@@ -62,17 +67,18 @@ impl Ir {
         self.blocks.push(Block::new())
     }
 
-    pub fn get(&self, reg: Reg) -> &Stmt {
-        &self.blocks[reg.block].stmts[reg.stmt]
-    }
-
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context, def: &FuncDef) -> io::Result<()>
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
     where
         Out: io::Write,
     {
+        writeln!(f, "Locals:")?;
+        for (i, local) in self.locals.iter().enumerate() {
+            writeln!(f, "{}{} {}", INDENT, i, local.tp.format(ctx))?;
+        }
+
         for (i, block) in self.blocks.iter().enumerate() {
             writeln!(f, "{}:", i)?;
-            block.print(f, ctx, def)?;
+            block.print(f, ctx)?;
         }
         Ok(())
     }
@@ -82,92 +88,106 @@ impl Block {
     pub fn new() -> Self {
         Self {
             stmts: List::new(),
-            term: Term::Unreachable,
+            term: Term { kind: TermKind::Unreachable },
         }
     }
 
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context, def: &FuncDef) -> io::Result<()>
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
     where
         Out: io::Write,
     {
-        for (i, stmt) in self.stmts.iter().enumerate() {
-            write!(f, "{}{} ", INDENT, i)?;
-            stmt.print(f, ctx, def)?;
+        for stmt in &self.stmts {
+            write!(f, "{}", INDENT)?;
+            stmt.print(f, ctx)?;
             writeln!(f)?;
         }
-        write!(f, "{}{} ", INDENT, "-")?;
-        self.term.print(f, ctx, def)?;
+        write!(f, "{}", INDENT)?;
+        self.term.print(f, ctx)?;
         writeln!(f)
     }
 }
 
 impl Stmt {
-    pub fn new(kind: StmtKind, tp: Type) -> Self {
-        Self { kind, tp }
-    }
-
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context, def: &FuncDef) -> io::Result<()>
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
     where
         Out: io::Write,
     {
-        match self.kind {
-            StmtKind::Phi { ref values } => {
-                write!(f, "Phi")?;
-                for &(value, reg) in values {
-                    write!(f, " ({} {})", value, reg)?;
-                }
+        self.kind.print(f, ctx)
+    }
+}
+
+impl StmtKind {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        match *self {
+            StmtKind::Move { dest, value } => {
+                write!(f, "{} = Move {}", dest, value)?;
             }
             StmtKind::Binary {
+                dest,
                 op,
-                ref left,
-                ref right,
+                left,
+                right,
             } => {
-                write!(f, "Binary {} {} {}", op, left, right)?;
+                write!(f, "{} = Binary {} {} {}", dest, op, left, right)?;
             }
-            StmtKind::Construct { ref tp, ref args } => {
-                write!(f, "Construct {}", tp.format(ctx))?;
+            StmtKind::Construct { dest, ref tp, ref args } => {
+                write!(f, "{} = Construct {}", dest, tp.format(ctx))?;
                 for arg in args {
                     write!(f, " {}", arg)?;
                 }
             }
-            StmtKind::Call { ref func, ref args } => {
+            StmtKind::Call { dest, ref func, ref args } => {
+                match dest {
+                    Some(dest) => write!(f, "{} = ", dest)?,
+                    None => {},
+                }
                 write!(f, "Call {}", func.format(ctx))?;
                 for arg in args {
                     write!(f, " {}", arg)?;
                 }
             }
-            StmtKind::Member { value, ref mem } => {
-                write!(f, "Member {} {}", value, mem.format(ctx))?;
+            StmtKind::Member { dest, value, ref mem } => {
+                write!(f, "{} = Member {} {}", dest, value, mem.format(ctx))?;
             }
-            StmtKind::Param(idx) => {
-                write!(f, "Param {}", def.params[idx].format(ctx))?;
-            }
-            StmtKind::Int(val) => {
-                write!(f, "Int {}", val)?;
+            StmtKind::Int { dest, value } => {
+                write!(f, "{} = Int {}", dest, value)?;
             }
         }
-
-        write!(f, " -> {}", self.tp.format(ctx))
+        Ok(())
     }
 }
 
 impl Term {
-    pub fn print<Out>(&self, f: &mut Out, _ctx: &Context, _def: &FuncDef) -> io::Result<()>
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        self.kind.print(f, ctx)
+    }
+}
+
+impl TermKind {
+    pub fn print<Out>(&self, f: &mut Out, _ctx: &Context) -> io::Result<()>
     where
         Out: io::Write,
     {
         match *self {
-            Term::Br { cond, succ, fail } => write!(f, "Br {} {} {}", cond, succ, fail),
-            Term::Jump(block) => write!(f, "Jump {}", block),
-            Term::Ret(Some(reg)) => write!(f, "Ret {}", reg),
-            Term::Ret(None) => write!(f, "Ret"),
-            Term::Unreachable => write!(f, "Unreachable"),
+            TermKind::Br { cond, succ, fail } => write!(f, "Br {} {} {}", cond, succ, fail),
+            TermKind::Jump { block } => write!(f, "Jump {}", block),
+            TermKind::Ret { value: Some(reg) } => write!(f, "Ret {}", reg),
+            TermKind::Ret { value: None } => write!(f, "Ret"),
+            TermKind::Unreachable => write!(f, "Unreachable"),
         }
     }
 }
 
 impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.block, self.stmt)
+        match *self {
+            Reg::Local(idx) => write!(f, "r{}", idx),
+        }
     }
 }

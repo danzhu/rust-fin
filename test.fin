@@ -29,13 +29,11 @@ def test as
     1 -> let a
 .
 
-def encrypt -> Int as
+def encrypt as
     'getchar -> let ch,
     if ch != (0 - 1) then
         'putchar (ch + 1),
         'encrypt
-    else
-        0
     .
 .
 
