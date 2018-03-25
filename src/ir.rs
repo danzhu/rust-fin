@@ -30,11 +30,15 @@ impl Ir {
     {
         writeln!(f, "Registers:")?;
         for (i, reg) in self.regs.iter().enumerate() {
-            writeln!(f, "{}{} {}", INDENT, i, reg.tp.format(ctx))?;
+            let idx = Reg::Local(Index::new(i));
+            writeln!(f, "{}{} {}", INDENT, idx, reg.tp.format(ctx))?;
         }
 
         for (i, block) in self.blocks.iter().enumerate() {
-            writeln!(f, "{}:", i)?;
+            let idx = Block {
+                index: Index::new(i),
+            };
+            writeln!(f, "{}:", idx)?;
             block.print(f, ctx)?;
         }
         Ok(())

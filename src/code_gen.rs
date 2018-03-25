@@ -96,7 +96,7 @@ where
 
         gen_sig(self.ctx, self.func, self.output)?;
 
-        writeln!(self.output, "{{")?;
+        writeln!(self.output, " {{")?;
 
         let mut first = true;
         for (i, block) in self.ir.blocks.iter().enumerate() {
@@ -209,7 +209,7 @@ where
                 ref args,
             } => {
                 let func = &self.ctx.get_func(func);
-                let name = funcdef_name(func);
+                let name = Value::Func(func.path.clone());
                 let tp = type_name(self.ctx, &func.ret);
 
                 let args = args.iter()
@@ -351,7 +351,7 @@ fn gen_sig<Out>(ctx: &Context, func: &FuncDef, output: &mut Out) -> Result<()>
 where
     Out: io::Write,
 {
-    let name = funcdef_name(func);
+    let name = Value::Func(func.path.clone());
     let ret = type_name(ctx, &func.ret);
 
     write!(output, "{} {}(", ret, name)?;
@@ -394,10 +394,6 @@ fn typedef_name(tp: &TypeDef) -> Value {
     }
 }
 
-fn funcdef_name(func: &FuncDef) -> Value {
-    Value::Func(func.path.clone())
-}
-
 #[derive(Clone)]
 enum Value {
     Builtin(&'static str),
@@ -416,9 +412,9 @@ impl fmt::Display for Value {
             Value::Type(ref name) => write!(f, "%{}", name),
             Value::Func(ref name) => write!(f, "@{}", name),
             Value::Block(ref lab) => write!(f, "%{}", lab),
-            Value::Reg(idx) => write!(f, "%{}", idx),
-            Value::Param(idx) => write!(f, "%p_{}", idx),
-            Value::Temp(idx) => write!(f, "%t_{}", idx),
+            Value::Reg(idx) => write!(f, "%_{}", idx),
+            Value::Param(idx) => write!(f, "%_p{}", idx),
+            Value::Temp(idx) => write!(f, "%_t{}", idx),
         }
     }
 }
