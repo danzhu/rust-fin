@@ -102,35 +102,32 @@ where
         for (i, block) in self.ir.blocks.iter().enumerate() {
             if first {
                 writeln!(self.output, "; locals")?;
-                for (idx, local) in self.ir.locals.iter().enumerate() {
-                    let tp = type_name(self.ctx, &local.tp);
-                    writeln!(
-                        self.output,
-                        "{}{} = alloca {}",
-                        INDENT,
-                        Value::Local(idx),
-                        tp
-                    )?;
+                for (idx, reg) in self.ir.regs.iter().enumerate() {
+                    let tp = type_name(self.ctx, &reg.tp);
+                    let reg = Value::Reg(Reg::Local(Index::new(idx)));
+
+                    self.exec(format_args!("{} = alloca {}", reg, tp))?;
                 }
 
                 writeln!(self.output, "; params")?;
                 for (idx, param) in self.func.params.iter().enumerate() {
                     let tp = type_name(self.ctx, &param.tp);
-                    writeln!(
-                        self.output,
-                        "{}store {} {}, {}* {}",
-                        INDENT,
+                    let reg = Value::Reg(Reg::Local(Index::new(idx)));
+
+                    self.exec(format_args!(
+                        "store {} {}, {}* {}",
                         tp,
                         Value::Param(idx),
                         tp,
-                        Value::Local(idx),
-                    )?;
+                        reg,
+                    ))?;
                 }
 
                 first = false;
             } else {
                 writeln!(self.output)?;
-                writeln!(self.output, "{}:", Label { index: i })?;
+                let index = Index::new(i);
+                writeln!(self.output, "{}:", Block { index })?;
             }
 
             for stmt in &block.stmts {
@@ -297,40 +294,29 @@ where
     }
 
     fn addr(&mut self, reg: Reg) -> Value {
-        match reg {
-            Reg::Local(idx) => Value::Local(idx.value()),
-        }
+        Value::Reg(reg)
     }
 
     fn load(&mut self, reg: Reg) -> Result<Value> {
-        match reg {
-            Reg::Local(idx) => {
-                let local = &self.ir.locals[idx];
-                let tp = type_name(self.ctx, &local.tp);
-                self.write(format_args!(
-                    "load {}, {}* {}",
-                    tp,
-                    tp,
-                    Value::Local(idx.value()),
-                ))
-            }
-        }
+        let tp = match reg {
+            Reg::Local(idx) => type_name(self.ctx, &self.ir.regs[idx].tp),
+        };
+
+        self.write(format_args!("load {}, {}* {}", tp, tp, Value::Reg(reg),))
     }
 
     fn store(&mut self, val: Value, reg: Reg) -> Result<()> {
-        match reg {
-            Reg::Local(idx) => {
-                let local = &self.ir.locals[idx];
-                let tp = type_name(self.ctx, &local.tp);
-                self.exec(format_args!(
-                    "store {} {}, {}* {}",
-                    tp,
-                    val,
-                    tp,
-                    Value::Local(idx.value()),
-                ))
-            }
-        }
+        let tp = match reg {
+            Reg::Local(idx) => type_name(self.ctx, &self.ir.regs[idx].tp),
+        };
+
+        self.exec(format_args!(
+            "store {} {}, {}* {}",
+            tp,
+            val,
+            tp,
+            Value::Reg(reg),
+        ))
     }
 
     fn write(&mut self, args: fmt::Arguments) -> Result<Value> {
@@ -350,13 +336,13 @@ where
         res
     }
 
-    fn label(&self, idx: Index) -> Value {
-        Value::Label(Label { index: idx.value() })
+    fn label(&self, block: Block) -> Value {
+        Value::Block(block)
     }
 
     fn reg_type(&self, reg: Reg) -> Value {
         match reg {
-            Reg::Local(idx) => type_name(self.ctx, &self.ir.locals[idx].tp),
+            Reg::Local(idx) => type_name(self.ctx, &self.ir.regs[idx].tp),
         }
     }
 }
@@ -413,24 +399,13 @@ fn funcdef_name(func: &FuncDef) -> Value {
 }
 
 #[derive(Clone)]
-struct Label {
-    index: usize,
-}
-
-impl fmt::Display for Label {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "b_{}", self.index)
-    }
-}
-
-#[derive(Clone)]
 enum Value {
     Builtin(&'static str),
     Type(Path),
     Func(Path),
-    Label(Label),
+    Block(Block),
+    Reg(Reg),
     Param(usize),
-    Local(usize),
     Temp(usize),
 }
 
@@ -440,9 +415,9 @@ impl fmt::Display for Value {
             Value::Builtin(name) => write!(f, "{}", name),
             Value::Type(ref name) => write!(f, "%{}", name),
             Value::Func(ref name) => write!(f, "@{}", name),
-            Value::Label(ref lab) => write!(f, "%{}", lab),
+            Value::Block(ref lab) => write!(f, "%{}", lab),
+            Value::Reg(idx) => write!(f, "%{}", idx),
             Value::Param(idx) => write!(f, "%p_{}", idx),
-            Value::Local(idx) => write!(f, "%r{}", idx),
             Value::Temp(idx) => write!(f, "%t_{}", idx),
         }
     }

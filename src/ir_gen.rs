@@ -8,7 +8,7 @@ const NO_REG: &str = "no register";
 pub fn generate(ctx: &mut Context) {
     for func in &mut ctx.func_defs {
         let ir = Ir {
-            locals: List::new(),
+            regs: List::new(),
             blocks: List::new(),
         };
         let mut gen = Generator { ir };
@@ -19,10 +19,10 @@ pub fn generate(ctx: &mut Context) {
             // generate entry block
             let mut block = gen.ir.push_block();
             for local in &body.locals {
-                let local = Local {
+                let reg = RegDef {
                     tp: local.tp.clone(),
                 };
-                gen.ir.locals.push(local);
+                gen.ir.regs.push(reg);
             }
 
             // generate body
@@ -46,7 +46,7 @@ struct Generator {
 }
 
 impl Generator {
-    fn gen_expr(&mut self, expr: &Expr, block: &mut Index) -> Option<Reg> {
+    fn gen_expr(&mut self, expr: &Expr, block: &mut Block) -> Option<Reg> {
         match expr.kind {
             ExprKind::Block { ref stmts } => {
                 // TODO: separate last statement in ast
@@ -225,12 +225,12 @@ impl Generator {
         }
     }
 
-    fn write(&mut self, block: Index, kind: StmtKind) {
+    fn write(&mut self, block: Block, kind: StmtKind) {
         self.ir.write(block, Stmt { kind });
     }
 
     fn temp(&mut self, tp: &Type) -> Reg {
         assert!(!tp.is_void());
-        Reg::Local(self.ir.locals.push(Local { tp: tp.clone() }))
+        Reg::Local(self.ir.regs.push(RegDef { tp: tp.clone() }))
     }
 }

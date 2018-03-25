@@ -6,24 +6,89 @@ use ctx::*;
 
 #[derive(Clone, Debug)]
 pub struct Ir {
-    pub locals: List<Local>,
-    pub blocks: List<Block>,
+    pub regs: List<RegDef>,
+    pub blocks: List<BlockDef>,
+}
+
+impl Ir {
+    pub fn write(&mut self, block: Block, stmt: Stmt) {
+        self.blocks[block.index].stmts.push(stmt);
+    }
+
+    pub fn end(&mut self, block: Block, term: Term) {
+        self.blocks[block.index].term = term;
+    }
+
+    pub fn push_block(&mut self) -> Block {
+        let index = self.blocks.push(BlockDef::new());
+        Block { index }
+    }
+
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        writeln!(f, "Registers:")?;
+        for (i, reg) in self.regs.iter().enumerate() {
+            writeln!(f, "{}{} {}", INDENT, i, reg.tp.format(ctx))?;
+        }
+
+        for (i, block) in self.blocks.iter().enumerate() {
+            writeln!(f, "{}:", i)?;
+            block.print(f, ctx)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
-pub struct Local {
+pub struct RegDef {
     pub tp: Type,
 }
 
 #[derive(Clone, Debug)]
-pub struct Block {
+pub struct BlockDef {
     pub stmts: List<Stmt>,
     pub term: Term,
+}
+
+impl BlockDef {
+    pub fn new() -> Self {
+        Self {
+            stmts: List::new(),
+            term: Term {
+                kind: TermKind::Unreachable,
+            },
+        }
+    }
+
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        for stmt in &self.stmts {
+            write!(f, "{}", INDENT)?;
+            stmt.print(f, ctx)?;
+            writeln!(f)?;
+        }
+        write!(f, "{}", INDENT)?;
+        self.term.print(f, ctx)?;
+        writeln!(f)
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Stmt {
     pub kind: StmtKind,
+}
+
+impl Stmt {
+    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
+    where
+        Out: io::Write,
+    {
+        self.kind.print(f, ctx)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -57,88 +122,6 @@ pub enum StmtKind {
         dest: Reg,
         value: i32,
     },
-}
-
-#[derive(Clone, Debug)]
-pub struct Term {
-    pub kind: TermKind,
-}
-
-#[derive(Clone, Debug)]
-pub enum TermKind {
-    Br { cond: Reg, succ: Index, fail: Index },
-    Jump { block: Index },
-    Ret { value: Option<Reg> },
-    Unreachable,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum Reg {
-    Local(Index),
-}
-
-impl Ir {
-    pub fn write(&mut self, block: Index, stmt: Stmt) {
-        self.blocks[block].stmts.push(stmt);
-    }
-
-    pub fn end(&mut self, block: Index, term: Term) {
-        self.blocks[block].term = term;
-    }
-
-    pub fn push_block(&mut self) -> Index {
-        self.blocks.push(Block::new())
-    }
-
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
-    where
-        Out: io::Write,
-    {
-        writeln!(f, "Locals:")?;
-        for (i, local) in self.locals.iter().enumerate() {
-            writeln!(f, "{}{} {}", INDENT, i, local.tp.format(ctx))?;
-        }
-
-        for (i, block) in self.blocks.iter().enumerate() {
-            writeln!(f, "{}:", i)?;
-            block.print(f, ctx)?;
-        }
-        Ok(())
-    }
-}
-
-impl Block {
-    pub fn new() -> Self {
-        Self {
-            stmts: List::new(),
-            term: Term {
-                kind: TermKind::Unreachable,
-            },
-        }
-    }
-
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
-    where
-        Out: io::Write,
-    {
-        for stmt in &self.stmts {
-            write!(f, "{}", INDENT)?;
-            stmt.print(f, ctx)?;
-            writeln!(f)?;
-        }
-        write!(f, "{}", INDENT)?;
-        self.term.print(f, ctx)?;
-        writeln!(f)
-    }
-}
-
-impl Stmt {
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
-    where
-        Out: io::Write,
-    {
-        self.kind.print(f, ctx)
-    }
 }
 
 impl StmtKind {
@@ -196,6 +179,11 @@ impl StmtKind {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Term {
+    pub kind: TermKind,
+}
+
 impl Term {
     pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
     where
@@ -203,6 +191,14 @@ impl Term {
     {
         self.kind.print(f, ctx)
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum TermKind {
+    Br { cond: Reg, succ: Block, fail: Block },
+    Jump { block: Block },
+    Ret { value: Option<Reg> },
+    Unreachable,
 }
 
 impl TermKind {
@@ -220,10 +216,26 @@ impl TermKind {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum Reg {
+    Local(Index),
+}
+
 impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Reg::Local(idx) => write!(f, "r{}", idx),
         }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Block {
+    pub index: Index,
+}
+
+impl fmt::Display for Block {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "b{}", self.index)
     }
 }
