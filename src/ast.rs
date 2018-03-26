@@ -212,8 +212,7 @@ impl Expr {
             }
         }
 
-        write!(f, " -> {}", self.tp.format(ctx))?;
-        write!(f, " [{}]", self.span.format(ctx))
+        write!(f, " -> {}", self.tp.format(ctx))
     }
 
     pub fn print<Out>(

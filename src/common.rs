@@ -77,10 +77,6 @@ impl Span {
             end: pos,
         }
     }
-
-    pub fn format(&self, ctx: &Context) -> String {
-        format!("{} - {}", self.start.format(ctx), self.end.format(ctx))
-    }
 }
 
 impl Pos {
