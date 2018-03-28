@@ -151,21 +151,35 @@ where
                 let val = self.load(value)?;
                 self.store(val, dest)?;
             }
+            StmtKind::Unary { dest, op, value } => {
+                let tp = self.reg_type(value);
+                let value = self.load(value)?;
+
+                let val = match op {
+                    UnaryOp::Neg => self.write(format_args!("sub {} 0, {}", tp, value))?,
+                    UnaryOp::Not => self.write(format_args!("xor {} {}, true", tp, value))?,
+                };
+                self.store(val, dest)?;
+            }
             StmtKind::Binary {
                 dest,
                 op,
                 left,
                 right,
             } => {
+                let tp = self.reg_type(left);
+                let left = self.load(left)?;
+                let right = self.load(right)?;
+
                 let op = match op {
-                    Op::Arith(op) => match op {
+                    BinaryOp::Arith(op) => match op {
                         ArithOp::Add => "add",
                         ArithOp::Sub => "sub",
                         ArithOp::Mul => "mul",
                         ArithOp::Div => "sdiv",
                         ArithOp::Mod => "srem",
                     }.to_string(),
-                    Op::Comp(op) => {
+                    BinaryOp::Comp(op) => {
                         "icmp ".to_string() + match op {
                             CompOp::Eq => "eq",
                             CompOp::Ne => "ne",
@@ -174,10 +188,6 @@ where
                         }
                     }
                 };
-
-                let tp = self.reg_type(left);
-                let left = self.load(left)?;
-                let right = self.load(right)?;
 
                 let val = self.write(format_args!("{} {} {}, {}", op, tp, left, right))?;
                 self.store(val, dest)?;

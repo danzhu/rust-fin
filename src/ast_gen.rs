@@ -387,6 +387,26 @@ impl<'a> Resolver<'a> {
                     TypeDefKind::Opaque => panic!("member of opaque type"),
                 }
             }
+            ExprNodeKind::Unary { op, ref value } => {
+                let value = self.resolve_expr(value, syms)?;
+
+                let tp = match op {
+                    UnaryOp::Neg => {
+                        // TODO: float
+                        expect_tp(&self.ctx.type_int, &value.tp, expr.span)?;
+                        self.ctx.type_int.clone()
+                    }
+                    UnaryOp::Not => {
+                        expect_tp(&self.ctx.type_bool, &value.tp, expr.span)?;
+                        self.ctx.type_bool.clone()
+                    }
+                };
+                let kind = ExprKind::Unary {
+                    op,
+                    value: Box::new(value),
+                };
+                Expr { tp, span, kind }
+            }
             ExprNodeKind::Binary {
                 op,
                 ref left,
@@ -398,8 +418,8 @@ impl<'a> Resolver<'a> {
                 expect_tp(&left.tp, &right.tp, expr.span)?;
 
                 let tp = match op {
-                    Op::Arith(_) => left.tp.clone(),
-                    Op::Comp(_) => self.ctx.type_bool.clone(),
+                    BinaryOp::Arith(_) => left.tp.clone(),
+                    BinaryOp::Comp(_) => self.ctx.type_bool.clone(),
                 };
                 let kind = ExprKind::Binary {
                     op,

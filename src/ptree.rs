@@ -81,8 +81,12 @@ pub enum ExprNodeKind {
         value: Box<ExprNode>,
         mem: MemberRef,
     },
+    Unary {
+        op: UnaryOp,
+        value: Box<ExprNode>,
+    },
     Binary {
-        op: Op,
+        op: BinaryOp,
         left: Box<ExprNode>,
         right: Box<ExprNode>,
     },

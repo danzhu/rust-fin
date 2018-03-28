@@ -144,7 +144,9 @@ impl Expr {
             ExprKind::Block { ref stmts } => for stmt in stmts {
                 act(stmt)?;
             },
-            ExprKind::Let { ref value, .. } | ExprKind::Member { ref value, .. } => {
+            ExprKind::Let { ref value, .. }
+            | ExprKind::Member { ref value, .. }
+            | ExprKind::Unary { ref value, .. } => {
                 act(value)?;
             }
             ExprKind::Construct { ref args, .. } | ExprKind::Function { ref args, .. } => {
@@ -194,6 +196,9 @@ impl Expr {
             }
             ExprKind::Member { ref mem, .. } => {
                 write!(f, "Member {}", mem.format(ctx))?;
+            }
+            ExprKind::Unary { ref op, .. } => {
+                write!(f, "Unary {}", op)?;
             }
             ExprKind::Binary { ref op, .. } => {
                 write!(f, "Binary {}", op)?;
@@ -258,8 +263,12 @@ pub enum ExprKind {
         value: Box<Expr>,
         mem: Member,
     },
+    Unary {
+        op: UnaryOp,
+        value: Box<Expr>,
+    },
     Binary {
-        op: Op,
+        op: BinaryOp,
         left: Box<Expr>,
         right: Box<Expr>,
     },

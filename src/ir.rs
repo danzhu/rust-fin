@@ -101,9 +101,14 @@ pub enum StmtKind {
         dest: Reg,
         value: Reg,
     },
+    Unary {
+        dest: Reg,
+        op: UnaryOp,
+        value: Reg,
+    },
     Binary {
         dest: Reg,
-        op: Op,
+        op: BinaryOp,
         left: Reg,
         right: Reg,
     },
@@ -136,6 +141,9 @@ impl StmtKind {
         match *self {
             StmtKind::Move { dest, value } => {
                 write!(f, "{} = Move {}", dest, value)?;
+            }
+            StmtKind::Unary { dest, op, value } => {
+                write!(f, "{} = Unary {} {}", dest, op, value)?;
             }
             StmtKind::Binary {
                 dest,

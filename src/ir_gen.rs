@@ -117,6 +117,13 @@ impl Generator {
                 );
                 Some(dest)
             }
+            ExprKind::Unary { op, ref value } => {
+                let value = self.gen_expr(value, block).expect(NO_REG);
+                let dest = self.temp(&expr.tp);
+
+                self.write(*block, StmtKind::Unary { dest, op, value });
+                Some(dest)
+            }
             ExprKind::Binary {
                 op,
                 ref left,

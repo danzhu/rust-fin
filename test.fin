@@ -2,7 +2,7 @@ extern getchar -> Int
 
 extern putchar ch Int -> Int
 
-struct Vec
+struct Vec as
     x Int
     y Int
 .
@@ -31,7 +31,7 @@ def test as
 
 def encrypt as
     'getchar -> let ch,
-    if ch != (0 - 1) then
+    if ch != -1 then
         'putchar (ch + 1),
         'encrypt
     .
@@ -41,7 +41,7 @@ def main -> Int as
     'test,
     'encrypt,
     'vec 3 4 -> let v,
-    if 'len v -> let i, i > 0 then
+    if 'len v -> let i, !(i < 0) then
         'fib i
     else
         0

@@ -171,31 +171,30 @@ where
             }
         } else {
             self.read();
-            match ch {
-                '\'' => TokenKind::Quote,
-                '-' => if let Some(&'>') = self.source.peek() {
+            match (ch, self.source.peek().cloned()) {
+                ('-', Some('>')) => {
                     self.read();
                     TokenKind::Arrow
-                } else {
-                    TokenKind::Operator(Op::Arith(ArithOp::Sub))
-                },
-                '!' => if let Some(&'=') = self.source.peek() {
+                }
+                ('!', Some('=')) => {
                     self.read();
-                    TokenKind::Operator(Op::Comp(CompOp::Ne))
-                } else {
-                    TokenKind::Not
-                },
-                '+' => TokenKind::Operator(Op::Arith(ArithOp::Add)),
-                '*' => TokenKind::Operator(Op::Arith(ArithOp::Mul)),
-                '/' => TokenKind::Operator(Op::Arith(ArithOp::Div)),
-                '%' => TokenKind::Operator(Op::Arith(ArithOp::Mod)),
-                '=' => TokenKind::Operator(Op::Comp(CompOp::Eq)),
-                '<' => TokenKind::Operator(Op::Comp(CompOp::Lt)),
-                '>' => TokenKind::Operator(Op::Comp(CompOp::Gt)),
-                ',' => TokenKind::Comma,
-                '.' => TokenKind::Period,
-                '(' => TokenKind::LParen,
-                ')' => TokenKind::RParen,
+                    TokenKind::Binary(BinaryOp::Comp(CompOp::Ne))
+                }
+                ('+', Some(' ')) => TokenKind::Binary(BinaryOp::Arith(ArithOp::Add)),
+                ('-', Some(' ')) => TokenKind::Binary(BinaryOp::Arith(ArithOp::Sub)),
+                ('*', Some(' ')) => TokenKind::Binary(BinaryOp::Arith(ArithOp::Mul)),
+                ('/', Some(' ')) => TokenKind::Binary(BinaryOp::Arith(ArithOp::Div)),
+                ('%', Some(' ')) => TokenKind::Binary(BinaryOp::Arith(ArithOp::Mod)),
+                ('=', Some(' ')) => TokenKind::Binary(BinaryOp::Comp(CompOp::Eq)),
+                ('<', Some(' ')) => TokenKind::Binary(BinaryOp::Comp(CompOp::Lt)),
+                ('>', Some(' ')) => TokenKind::Binary(BinaryOp::Comp(CompOp::Gt)),
+                ('-', _) => TokenKind::Unary(UnaryOp::Neg),
+                ('!', _) => TokenKind::Unary(UnaryOp::Not),
+                (',', _) => TokenKind::Comma,
+                ('.', _) => TokenKind::Period,
+                ('(', _) => TokenKind::LParen,
+                (')', _) => TokenKind::RParen,
+                ('\'', _) => TokenKind::Quote,
                 _ => return self.error(ErrorKind::UnexpectedChar(ch), start),
             }
         };
@@ -207,12 +206,18 @@ where
     }
 }
 
-struct Parser<Iter: Iterator<Item = Token>> {
+struct Parser<Iter>
+where
+    Iter: Iterator<Item = Token>,
+{
     source: iter::Peekable<Iter>,
     span: Span,
 }
 
-impl<Iter: Iterator<Item = Token>> Parser<Iter> {
+impl<Iter> Parser<Iter>
+where
+    Iter: Iterator<Item = Token>,
+{
     fn parse(&mut self) -> Result<Vec<ItemNode>> {
         let mut items = Vec::new();
 
@@ -247,6 +252,8 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         let start = self.start_span();
         let name = expect_value!(self, Type);
         let span = self.end_span(start);
+
+        expect!(self, As);
 
         let fields = self.bind_list()?;
 
@@ -364,8 +371,8 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         let start = self.start_span();
 
         let mut expr = self.term()?;
-        while let Some(&TokenKind::Operator(_)) = self.peek() {
-            let op = expect_value!(self, Operator);
+        while let Some(&TokenKind::Binary(_)) = self.peek() {
+            let op = expect_value!(self, Binary);
             let right = self.term()?;
 
             let span = self.end_span(start);
@@ -456,7 +463,8 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         loop {
             // TODO: remove ugly duplicate code
             match self.peek() {
-                Some(&TokenKind::Bind(_))
+                Some(&TokenKind::Unary(_))
+                | Some(&TokenKind::Bind(_))
                 | Some(&TokenKind::Int(_))
                 | Some(&TokenKind::If)
                 | Some(&TokenKind::LParen) => {
@@ -472,6 +480,13 @@ impl<Iter: Iterator<Item = Token>> Parser<Iter> {
         let start = self.start_span();
 
         let kind = match self.next() {
+            Some(TokenKind::Unary(op)) => {
+                let expr = self.factor()?;
+                ExprNodeKind::Unary {
+                    op,
+                    value: Box::new(expr),
+                }
+            }
             Some(TokenKind::Bind(name)) => {
                 let span = self.end_span(start);
                 ExprNodeKind::Bind {

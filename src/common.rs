@@ -18,7 +18,13 @@ pub struct Pos {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum Op {
+pub enum UnaryOp {
+    Neg,
+    Not,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum BinaryOp {
     Arith(ArithOp),
     Comp(CompOp),
 }
@@ -86,18 +92,27 @@ impl Pos {
     }
 }
 
-impl fmt::Display for Op {
+impl fmt::Display for UnaryOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Op::Arith(ArithOp::Add) => write!(f, "Add"),
-            Op::Arith(ArithOp::Sub) => write!(f, "Sub"),
-            Op::Arith(ArithOp::Mul) => write!(f, "Mul"),
-            Op::Arith(ArithOp::Div) => write!(f, "Div"),
-            Op::Arith(ArithOp::Mod) => write!(f, "Mod"),
-            Op::Comp(CompOp::Eq) => write!(f, "Eq"),
-            Op::Comp(CompOp::Ne) => write!(f, "Ne"),
-            Op::Comp(CompOp::Lt) => write!(f, "Lt"),
-            Op::Comp(CompOp::Gt) => write!(f, "Gt"),
+            UnaryOp::Neg => write!(f, "Neg"),
+            UnaryOp::Not => write!(f, "Not"),
+        }
+    }
+}
+
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BinaryOp::Arith(ArithOp::Add) => write!(f, "Add"),
+            BinaryOp::Arith(ArithOp::Sub) => write!(f, "Sub"),
+            BinaryOp::Arith(ArithOp::Mul) => write!(f, "Mul"),
+            BinaryOp::Arith(ArithOp::Div) => write!(f, "Div"),
+            BinaryOp::Arith(ArithOp::Mod) => write!(f, "Mod"),
+            BinaryOp::Comp(CompOp::Eq) => write!(f, "Eq"),
+            BinaryOp::Comp(CompOp::Ne) => write!(f, "Ne"),
+            BinaryOp::Comp(CompOp::Lt) => write!(f, "Lt"),
+            BinaryOp::Comp(CompOp::Gt) => write!(f, "Gt"),
         }
     }
 }
