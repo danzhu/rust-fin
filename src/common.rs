@@ -10,63 +10,6 @@ pub struct Span {
     pub end: Pos,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Pos {
-    pub file: Index,
-    pub line: usize,
-    pub column: usize,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum UnaryOp {
-    Neg,
-    Not,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum BinaryOp {
-    Arith(ArithOp),
-    Comp(CompOp),
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum ArithOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum CompOp {
-    Eq,
-    Ne,
-    Lt,
-    Gt,
-}
-
-#[derive(Clone, Debug)]
-pub struct Path {
-    pub name: Name,
-}
-
-impl fmt::Display for Path {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
-
-pub type Name = String;
-
-#[derive(Clone, Debug)]
-pub struct List<T> {
-    items: Vec<T>,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Index(usize);
-
 impl Span {
     pub fn new(start: Pos, end: Pos) -> Self {
         Span { start, end }
@@ -85,11 +28,24 @@ impl Span {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Pos {
+    pub file: Index,
+    pub line: usize,
+    pub column: usize,
+}
+
 impl Pos {
     pub fn format(&self, ctx: &Context) -> String {
         let filename = &ctx.sources[self.file].filename;
         format!("{}:{}:{}", filename, self.line + 1, self.column + 1)
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum UnaryOp {
+    Neg,
+    Not,
 }
 
 impl fmt::Display for UnaryOp {
@@ -101,20 +57,77 @@ impl fmt::Display for UnaryOp {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum BinaryOp {
+    Arith(ArithOp),
+    Comp(CompOp),
+}
+
 impl fmt::Display for BinaryOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            BinaryOp::Arith(ArithOp::Add) => write!(f, "Add"),
-            BinaryOp::Arith(ArithOp::Sub) => write!(f, "Sub"),
-            BinaryOp::Arith(ArithOp::Mul) => write!(f, "Mul"),
-            BinaryOp::Arith(ArithOp::Div) => write!(f, "Div"),
-            BinaryOp::Arith(ArithOp::Mod) => write!(f, "Mod"),
-            BinaryOp::Comp(CompOp::Eq) => write!(f, "Eq"),
-            BinaryOp::Comp(CompOp::Ne) => write!(f, "Ne"),
-            BinaryOp::Comp(CompOp::Lt) => write!(f, "Lt"),
-            BinaryOp::Comp(CompOp::Gt) => write!(f, "Gt"),
+            BinaryOp::Arith(op) => write!(f, "{}", op),
+            BinaryOp::Comp(op) => write!(f, "{}", op),
         }
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+}
+
+impl fmt::Display for ArithOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ArithOp::Add => write!(f, "Add"),
+            ArithOp::Sub => write!(f, "Sub"),
+            ArithOp::Mul => write!(f, "Mul"),
+            ArithOp::Div => write!(f, "Div"),
+            ArithOp::Mod => write!(f, "Mod"),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum CompOp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+}
+
+impl fmt::Display for CompOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CompOp::Eq => write!(f, "Eq"),
+            CompOp::Ne => write!(f, "Ne"),
+            CompOp::Lt => write!(f, "Lt"),
+            CompOp::Gt => write!(f, "Gt"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Path {
+    pub name: Name,
+}
+
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+pub type Name = String;
+
+#[derive(Clone, Debug)]
+pub struct List<T> {
+    items: Vec<T>,
 }
 
 impl<T> List<T> {
@@ -182,6 +195,9 @@ impl<'a, T> IntoIterator for &'a mut List<T> {
         self.iter_mut()
     }
 }
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Index(usize);
 
 impl Index {
     pub fn new(idx: usize) -> Self {
