@@ -280,13 +280,51 @@ impl<'a> Resolver<'a> {
                 };
                 Expr { tp, span, kind }
             }
+            ExprNodeKind::Var { ref tp } => {
+                let tp = resolve_type(tp, self.refs)?;
+
+                let kind = ExprKind::Var { tp: tp.clone() };
+                let tp = Type {
+                    kind: TypeKind::Ref { tp: Box::new(tp) },
+                };
+                Expr { tp, span, kind }
+            }
+            ExprNodeKind::Deref { ref value } => {
+                let value = self.resolve_expr(value, syms)?;
+
+                let tp = if let TypeKind::Ref { ref tp } = value.tp.kind {
+                    (**tp).clone()
+                } else {
+                    return Err(Error {
+                        kind: ErrorKind::DerefNonRef {
+                            tp: value.tp.clone(),
+                        },
+                        span: expr.span,
+                    });
+                };
+                let kind = ExprKind::Deref {
+                    value: Box::new(value),
+                };
+                Expr { tp, span, kind }
+            }
+            ExprNodeKind::Assign { ref value, ref var } => {
+                let value = self.resolve_expr(value, syms)?;
+                let var = self.resolve_expr(var, syms)?;
+
+                let tp = self.ctx.type_void.clone();
+                let kind = ExprKind::Assign {
+                    value: Box::new(value),
+                    var: Box::new(var),
+                };
+                Expr { tp, span, kind }
+            }
             ExprNodeKind::Construct { ref tp, ref args } => {
                 let tp = resolve_type(tp, self.refs)?;
                 let args = args.iter()
                     .map(|arg| self.resolve_expr(arg, syms))
                     .collect::<Result<Vec<_>>>()?;
 
-                let def = &self.ctx.get_type(&tp);
+                let def = self.ctx.get_type(&tp);
                 match def.kind {
                     TypeDefKind::Struct { ref fields, .. } => {
                         if fields.len() != args.len() {
@@ -324,7 +362,7 @@ impl<'a> Resolver<'a> {
                     .map(|arg| self.resolve_expr(arg, syms))
                     .collect::<Result<Vec<_>>>()?;
 
-                let def = &self.ctx.get_func(&func);
+                let def = self.ctx.get_func(&func);
 
                 if def.params.len() != args.len() {
                     return Err(Error {
@@ -550,6 +588,7 @@ pub enum ErrorKind {
     TypeMismatch { expect: Type, got: Type },
     ConstructPrimitive { tp: Type },
     MemberNotFound { tp: Type, mem: MemberRef },
+    DerefNonRef { tp: Type },
 }
 
 impl Print for ErrorKind {
@@ -588,6 +627,9 @@ impl Print for ErrorKind {
                 tp.format(ctx),
                 mem.name,
             ),
+            ErrorKind::DerefNonRef { ref tp } => {
+                write!(f, "dereferencing a non-reference type {}", tp.format(ctx))
+            }
         }
     }
 }

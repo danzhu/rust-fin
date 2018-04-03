@@ -7,41 +7,34 @@ struct Vec as
     y Int
 .
 
-def vec x Int y Int -> Vec as
-    'Vec x y
-.
-
 def len v Vec -> Int as
     (v 'x * v 'x) + (v 'y * v 'y)
 .
 
 def fib n Int -> Int as
-    if n = 0 then
+    if n == 0 then
         0
-    elif n = 1 then
+    elif n == 1 then
         1
     else
         'fib (n - 1) + 'fib (n - 2)
     .
 .
 
-def test as
-    1 -> let a
-.
-
-def encrypt as
-    'getchar -> let ch,
-    if ch != -1 then
-        'putchar (ch + 1),
-        'encrypt
+def encrypt shift Int as
+    let Int -> ch,
+    'getchar = ch,
+    if *ch != -1 then
+        *ch + shift = ch,
+        'putchar *ch,
+        'encrypt shift
     .
 .
 
 def main -> Int as
-    'test,
-    'encrypt,
-    'vec 3 4 -> let v,
-    if 'len v -> let i, !(i < 0) then
+    'encrypt 1,
+    'Vec 3 4 -> v,
+    if 'len v -> i, !(i < 0) then
         'fib i
     else
         0

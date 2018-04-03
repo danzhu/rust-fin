@@ -101,26 +101,23 @@ where
         let mut first = true;
         for (i, block) in self.ir.blocks.iter().enumerate() {
             if first {
-                writeln!(self.output, "; locals")?;
-                for (idx, reg) in self.ir.regs.iter().enumerate() {
-                    let tp = type_name(self.ctx, &reg.tp);
-                    let reg = Value::Reg(Reg::Local(Index::new(idx)));
+                writeln!(self.output, "; variables")?;
+                for (idx, var) in self.ir.vars.iter().enumerate() {
+                    let tp = type_name(self.ctx, &var.tp);
+                    let index = Index::new(idx);
+                    let reg = Value::Var(Var { index });
 
                     self.exec(format_args!("{} = alloca {}", reg, tp))?;
                 }
 
-                writeln!(self.output, "; params")?;
-                for (idx, param) in self.func.params.iter().enumerate() {
-                    let tp = type_name(self.ctx, &param.tp);
-                    let reg = Value::Reg(Reg::Local(Index::new(idx)));
+                writeln!(self.output, "; registers")?;
+                for (idx, reg) in self.ir.regs.iter().enumerate() {
+                    let tp = type_name(self.ctx, &reg.tp);
+                    let reg = Value::Reg(Reg::Local {
+                        index: Index::new(idx),
+                    });
 
-                    self.exec(format_args!(
-                        "store {} {}, {}* {}",
-                        tp,
-                        Value::Param(idx),
-                        tp,
-                        reg,
-                    ))?;
+                    self.exec(format_args!("{} = alloca {}", reg, tp))?;
                 }
 
                 first = false;
@@ -147,9 +144,47 @@ where
         writeln!(self.output)?;
 
         match stmt.kind {
+            StmtKind::Param { dest, param } => {
+                let def = &self.func.params[param];
+                let tp = type_name(self.ctx, &def.tp);
+
+                self.exec(format_args!(
+                    "store {} {}, {}* {}",
+                    tp,
+                    Value::Param(param.value()),
+                    tp,
+                    Value::Reg(dest),
+                ))?;
+            }
+            StmtKind::Var { dest, var } => {
+                let def = &self.ir.vars[var.index];
+                let tp = type_name(self.ctx, &def.tp);
+
+                self.exec(format_args!(
+                    "store {}* {}, {}** {}",
+                    tp,
+                    Value::Var(var),
+                    tp,
+                    Value::Reg(dest),
+                ))?;
+            }
             StmtKind::Move { dest, value } => {
                 let val = self.load(value)?;
                 self.store(val, dest)?;
+            }
+            StmtKind::Load { dest, value } => {
+                let tp = self.reg_type(dest);
+                let value = self.load(value)?;
+
+                let val = self.write(format_args!("load {}, {}* {}", tp, tp, value,))?;
+                self.store(val, dest)?;
+            }
+            StmtKind::Store { value, var } => {
+                let tp = self.reg_type(value);
+                let value = self.load(value)?;
+                let var = self.load(var)?;
+
+                self.exec(format_args!("store {} {}, {}* {}", tp, value, tp, var,))?;
             }
             StmtKind::Unary { dest, op, value } => {
                 let tp = self.reg_type(value);
@@ -309,7 +344,7 @@ where
 
     fn load(&mut self, reg: Reg) -> Result<Value> {
         let tp = match reg {
-            Reg::Local(idx) => type_name(self.ctx, &self.ir.regs[idx].tp),
+            Reg::Local { index } => type_name(self.ctx, &self.ir.regs[index].tp),
         };
 
         self.write(format_args!("load {}, {}* {}", tp, tp, Value::Reg(reg),))
@@ -317,7 +352,7 @@ where
 
     fn store(&mut self, val: Value, reg: Reg) -> Result<()> {
         let tp = match reg {
-            Reg::Local(idx) => type_name(self.ctx, &self.ir.regs[idx].tp),
+            Reg::Local { index } => type_name(self.ctx, &self.ir.regs[index].tp),
         };
 
         self.exec(format_args!(
@@ -350,9 +385,9 @@ where
         Value::Block(block)
     }
 
-    fn reg_type(&self, reg: Reg) -> Value {
+    fn reg_type(&self, reg: Reg) -> String {
         match reg {
-            Reg::Local(idx) => type_name(self.ctx, &self.ir.regs[idx].tp),
+            Reg::Local { index } => type_name(self.ctx, &self.ir.regs[index].tp),
         }
     }
 }
@@ -383,34 +418,34 @@ where
     Ok(())
 }
 
-fn type_name(ctx: &Context, tp: &Type) -> Value {
+fn type_name(ctx: &Context, tp: &Type) -> String {
     match tp.kind {
         TypeKind::Named { index } => {
             let def = &ctx.type_defs[index];
             typedef_name(def)
         }
-        TypeKind::Void => Value::Builtin("void"),
+        TypeKind::Ref { ref tp } => format!("{}*", type_name(ctx, tp)),
+        TypeKind::Void => "void".to_string(),
     }
 }
 
-fn typedef_name(tp: &TypeDef) -> Value {
+fn typedef_name(tp: &TypeDef) -> String {
     match tp.kind {
-        TypeDefKind::Struct { .. } => Value::Type(tp.path.clone()),
-        TypeDefKind::Builtin(ref tp) => Value::Builtin(match *tp {
+        TypeDefKind::Struct { .. } => format!("%{}", tp.path),
+        TypeDefKind::Builtin(ref tp) => match *tp {
             BuiltinType::Int => "i32",
             BuiltinType::Bool => "i1",
-        }),
+        }.to_string(),
         TypeDefKind::Opaque => panic!("getting name of opaque type"),
     }
 }
 
 #[derive(Clone)]
 enum Value {
-    Builtin(&'static str),
-    Type(Path),
     Func(Path),
     Block(Block),
     Reg(Reg),
+    Var(Var),
     Param(usize),
     Temp(usize),
 }
@@ -418,11 +453,10 @@ enum Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Value::Builtin(name) => write!(f, "{}", name),
-            Value::Type(ref name) => write!(f, "%{}", name),
             Value::Func(ref name) => write!(f, "@{}", name),
             Value::Block(ref lab) => write!(f, "%{}", lab),
             Value::Reg(idx) => write!(f, "%_{}", idx),
+            Value::Var(idx) => write!(f, "%_{}", idx),
             Value::Param(idx) => write!(f, "%_p{}", idx),
             Value::Temp(idx) => write!(f, "%_t{}", idx),
         }

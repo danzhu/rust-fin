@@ -69,6 +69,16 @@ pub enum ExprNodeKind {
         value: Box<ExprNode>,
         bind: LocalNode,
     },
+    Var {
+        tp: TypeRef,
+    },
+    Deref {
+        value: Box<ExprNode>,
+    },
+    Assign {
+        value: Box<ExprNode>,
+        var: Box<ExprNode>,
+    },
     Construct {
         tp: TypeRef,
         args: Vec<ExprNode>,

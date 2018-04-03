@@ -8,6 +8,7 @@ const NO_REG: &str = "no register";
 pub fn generate(ctx: &mut Context) {
     for func in &mut ctx.func_defs {
         let ir = Ir {
+            vars: List::new(),
             regs: List::new(),
             blocks: List::new(),
         };
@@ -16,13 +17,27 @@ pub fn generate(ctx: &mut Context) {
         if let Some(body) = func.body {
             let body = &ctx.bodies[body];
 
-            // generate entry block
-            let mut block = gen.ir.push_block();
+            // local bindings
+            // TODO: this assumes first regsters are locals,
+            // better to have an explicit table
             for local in &body.locals {
                 let reg = RegDef {
                     tp: local.tp.clone(),
                 };
                 gen.ir.regs.push(reg);
+            }
+
+            // generate entry block
+            let mut block = gen.ir.push_block();
+            for i in 0..func.params.len() {
+                let index = Index::new(i);
+                let dest = Reg::Local { index };
+                gen.ir.write(
+                    block,
+                    Stmt {
+                        kind: StmtKind::Param { dest, param: index },
+                    },
+                )
             }
 
             // generate body
@@ -61,10 +76,36 @@ impl Generator {
             } => {
                 let value = self.gen_expr(value, block).expect(NO_REG);
                 let dest = match bind.kind {
-                    BindKind::Local { index } => Reg::Local(index),
+                    BindKind::Local { index } => Reg::Local { index },
                 };
 
                 self.write(*block, StmtKind::Move { dest, value });
+                None
+            }
+            ExprKind::Var { ref tp } => {
+                let index = self.ir.vars.push(VarDef { tp: tp.clone() });
+                let var = Var { index };
+                let dest = self.temp(&Type {
+                    kind: TypeKind::Ref {
+                        tp: Box::new(tp.clone()),
+                    },
+                });
+
+                self.write(*block, StmtKind::Var { dest, var });
+                Some(dest)
+            }
+            ExprKind::Deref { ref value } => {
+                let value = self.gen_expr(value, block).expect(NO_REG);
+                let dest = self.temp(&expr.tp);
+
+                self.write(*block, StmtKind::Load { dest, value });
+                Some(dest)
+            }
+            ExprKind::Assign { ref value, ref var } => {
+                let value = self.gen_expr(value, block).expect(NO_REG);
+                let var = self.gen_expr(var, block).expect(NO_REG);
+
+                self.write(*block, StmtKind::Store { value, var });
                 None
             }
             ExprKind::Construct { ref tp, ref args } => {
@@ -217,7 +258,7 @@ impl Generator {
             }
             ExprKind::Bind { ref bind } => {
                 let dest = match bind.kind {
-                    BindKind::Local { index } => Reg::Local(index),
+                    BindKind::Local { index } => Reg::Local { index },
                 };
 
                 Some(dest)
@@ -238,6 +279,8 @@ impl Generator {
 
     fn temp(&mut self, tp: &Type) -> Reg {
         assert!(!tp.is_void());
-        Reg::Local(self.ir.regs.push(RegDef { tp: tp.clone() }))
+        Reg::Local {
+            index: self.ir.regs.push(RegDef { tp: tp.clone() }),
+        }
     }
 }

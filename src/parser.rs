@@ -176,6 +176,10 @@ where
                     self.read();
                     TokenKind::Arrow
                 }
+                ('=', Some('=')) => {
+                    self.read();
+                    TokenKind::Binary(BinaryOp::Comp(CompOp::Eq))
+                }
                 ('!', Some('=')) => {
                     self.read();
                     TokenKind::Binary(BinaryOp::Comp(CompOp::Ne))
@@ -185,11 +189,12 @@ where
                 ('*', Some(' ')) => TokenKind::Binary(BinaryOp::Arith(ArithOp::Mul)),
                 ('/', Some(' ')) => TokenKind::Binary(BinaryOp::Arith(ArithOp::Div)),
                 ('%', Some(' ')) => TokenKind::Binary(BinaryOp::Arith(ArithOp::Mod)),
-                ('=', Some(' ')) => TokenKind::Binary(BinaryOp::Comp(CompOp::Eq)),
                 ('<', Some(' ')) => TokenKind::Binary(BinaryOp::Comp(CompOp::Lt)),
                 ('>', Some(' ')) => TokenKind::Binary(BinaryOp::Comp(CompOp::Gt)),
                 ('-', _) => TokenKind::Unary(UnaryOp::Neg),
                 ('!', _) => TokenKind::Unary(UnaryOp::Not),
+                ('=', _) => TokenKind::Equal,
+                ('*', _) => TokenKind::Star,
                 (',', _) => TokenKind::Comma,
                 ('.', _) => TokenKind::Period,
                 ('(', _) => TokenKind::LParen,
@@ -343,27 +348,39 @@ where
         let start = self.start_span();
 
         let expr = self.expr()?;
-        if let Some(&TokenKind::Arrow) = self.peek() {
-            self.next();
-            // TODO: pattern
-            expect!(self, Let);
-            let local_start = self.start_span();
-            let name = expect_value!(self, Bind);
-            let local_span = self.end_span(local_start);
+        match self.peek() {
+            Some(&TokenKind::Arrow) => {
+                self.next();
+                let local_start = self.start_span();
+                let name = expect_value!(self, Bind);
+                let local_span = self.end_span(local_start);
 
-            let span = self.end_span(start);
-            Ok(ExprNode {
-                span,
-                kind: ExprNodeKind::Let {
-                    value: Box::new(expr),
-                    bind: LocalNode {
-                        name,
-                        span: local_span,
+                let span = self.end_span(start);
+                Ok(ExprNode {
+                    span,
+                    kind: ExprNodeKind::Let {
+                        value: Box::new(expr),
+                        bind: LocalNode {
+                            name,
+                            span: local_span,
+                        },
                     },
-                },
-            })
-        } else {
-            Ok(expr)
+                })
+            }
+            Some(&TokenKind::Equal) => {
+                self.next();
+                let var = self.expr()?;
+
+                let span = self.end_span(start);
+                Ok(ExprNode {
+                    span,
+                    kind: ExprNodeKind::Assign {
+                        value: Box::new(expr),
+                        var: Box::new(var),
+                    },
+                })
+            }
+            _ => Ok(expr),
         }
     }
 
@@ -466,6 +483,8 @@ where
                 Some(&TokenKind::Unary(_))
                 | Some(&TokenKind::Bind(_))
                 | Some(&TokenKind::Int(_))
+                | Some(&TokenKind::Let)
+                | Some(&TokenKind::Star)
                 | Some(&TokenKind::If)
                 | Some(&TokenKind::LParen) => {
                     args.push(self.factor()?);
@@ -497,6 +516,16 @@ where
                 }
             }
             Some(TokenKind::Int(value)) => ExprNodeKind::Int { value },
+            Some(TokenKind::Let) => {
+                let tp = self.tp()?;
+                ExprNodeKind::Var { tp }
+            }
+            Some(TokenKind::Star) => {
+                let expr = self.factor()?;
+                ExprNodeKind::Deref {
+                    value: Box::new(expr),
+                }
+            }
             Some(TokenKind::If) => {
                 let cond = self.cond()?;
                 expect!(self, Period);

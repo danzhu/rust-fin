@@ -77,7 +77,7 @@ impl Context {
     pub fn get_type(&self, tp: &Type) -> &TypeDef {
         match tp.kind {
             TypeKind::Named { index } => &self.type_defs[index],
-            TypeKind::Void => panic!("void has no type def"),
+            TypeKind::Ref { .. } | TypeKind::Void => panic!("non-named type has no type def"),
         }
     }
 

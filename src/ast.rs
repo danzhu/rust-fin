@@ -145,9 +145,14 @@ impl Expr {
                 act(stmt)?;
             },
             ExprKind::Let { ref value, .. }
+            | ExprKind::Deref { ref value }
             | ExprKind::Member { ref value, .. }
             | ExprKind::Unary { ref value, .. } => {
                 act(value)?;
+            }
+            ExprKind::Assign { ref value, ref var } => {
+                act(value)?;
+                act(var)?;
             }
             ExprKind::Construct { ref args, .. } | ExprKind::Function { ref args, .. } => {
                 for arg in args {
@@ -171,7 +176,10 @@ impl Expr {
                 act(succ)?;
                 act(fail)?;
             }
-            ExprKind::Int { .. } | ExprKind::Bind { .. } | ExprKind::Noop => {}
+            ExprKind::Var { .. }
+            | ExprKind::Int { .. }
+            | ExprKind::Bind { .. }
+            | ExprKind::Noop => {}
         }
 
         Ok(())
@@ -187,6 +195,15 @@ impl Expr {
             }
             ExprKind::Let { ref bind, .. } => {
                 write!(f, "Let {}", bind.format(ctx, def, body))?;
+            }
+            ExprKind::Var { ref tp } => {
+                write!(f, "Var {}", tp.format(ctx))?;
+            }
+            ExprKind::Deref { .. } => {
+                write!(f, "Deref")?;
+            }
+            ExprKind::Assign { .. } => {
+                write!(f, "Assign")?;
             }
             ExprKind::Construct { ref tp, .. } => {
                 write!(f, "Construct {}", tp.format(ctx))?;
@@ -251,6 +268,16 @@ pub enum ExprKind {
         value: Box<Expr>,
         bind: Bind,
     },
+    Var {
+        tp: Type,
+    },
+    Deref {
+        value: Box<Expr>,
+    },
+    Assign {
+        value: Box<Expr>,
+        var: Box<Expr>,
+    },
     Construct {
         tp: Type,
         args: Vec<Expr>,
@@ -302,6 +329,7 @@ impl Type {
     pub fn format(&self, ctx: &Context) -> String {
         match self.kind {
             TypeKind::Named { index } => format!("{}", ctx.type_defs[index].path),
+            TypeKind::Ref { ref tp } => format!("&{}", tp.format(ctx)),
             TypeKind::Void => "Void".to_string(),
         }
     }
@@ -310,6 +338,7 @@ impl Type {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeKind {
     Named { index: Index },
+    Ref { tp: Box<Type> },
     Void,
 }
 

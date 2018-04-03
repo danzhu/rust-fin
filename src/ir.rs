@@ -6,6 +6,7 @@ use ctx::*;
 
 #[derive(Clone, Debug)]
 pub struct Ir {
+    pub vars: List<VarDef>,
     pub regs: List<RegDef>,
     pub blocks: List<BlockDef>,
 }
@@ -28,9 +29,19 @@ impl Ir {
     where
         Out: io::Write,
     {
+        writeln!(f, "Variables:")?;
+        for (i, var) in self.vars.iter().enumerate() {
+            let idx = Var {
+                index: Index::new(i),
+            };
+            writeln!(f, "{}{} {}", INDENT, idx, var.tp.format(ctx))?;
+        }
+
         writeln!(f, "Registers:")?;
         for (i, reg) in self.regs.iter().enumerate() {
-            let idx = Reg::Local(Index::new(i));
+            let idx = Reg::Local {
+                index: Index::new(i),
+            };
             writeln!(f, "{}{} {}", INDENT, idx, reg.tp.format(ctx))?;
         }
 
@@ -43,6 +54,11 @@ impl Ir {
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct VarDef {
+    pub tp: Type,
 }
 
 #[derive(Clone, Debug)]
@@ -91,56 +107,21 @@ impl Stmt {
     where
         Out: io::Write,
     {
-        self.kind.print(f, ctx)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum StmtKind {
-    Move {
-        dest: Reg,
-        value: Reg,
-    },
-    Unary {
-        dest: Reg,
-        op: UnaryOp,
-        value: Reg,
-    },
-    Binary {
-        dest: Reg,
-        op: BinaryOp,
-        left: Reg,
-        right: Reg,
-    },
-    Construct {
-        dest: Reg,
-        tp: Type,
-        args: Vec<Reg>,
-    },
-    Call {
-        dest: Option<Reg>,
-        func: Func,
-        args: Vec<Reg>,
-    },
-    Member {
-        dest: Reg,
-        value: Reg,
-        mem: Member,
-    },
-    Int {
-        dest: Reg,
-        value: i32,
-    },
-}
-
-impl StmtKind {
-    pub fn print<Out>(&self, f: &mut Out, ctx: &Context) -> io::Result<()>
-    where
-        Out: io::Write,
-    {
-        match *self {
+        match self.kind {
+            StmtKind::Param { dest, param } => {
+                write!(f, "{} = Param {}", dest, param)?;
+            }
+            StmtKind::Var { dest, var } => {
+                write!(f, "{} = Var {}", dest, var)?;
+            }
             StmtKind::Move { dest, value } => {
                 write!(f, "{} = Move {}", dest, value)?;
+            }
+            StmtKind::Load { dest, value } => {
+                write!(f, "{} = Load {}", dest, value)?;
+            }
+            StmtKind::Store { value, var } => {
+                write!(f, "Store {} {}", value, var)?;
             }
             StmtKind::Unary { dest, op, value } => {
                 write!(f, "{} = Unary {} {}", dest, op, value)?;
@@ -192,6 +173,60 @@ impl StmtKind {
 }
 
 #[derive(Clone, Debug)]
+pub enum StmtKind {
+    Param {
+        dest: Reg,
+        param: Index,
+    },
+    Var {
+        dest: Reg,
+        var: Var,
+    },
+    Move {
+        dest: Reg,
+        value: Reg,
+    },
+    Load {
+        dest: Reg,
+        value: Reg,
+    },
+    Store {
+        value: Reg,
+        var: Reg,
+    },
+    Unary {
+        dest: Reg,
+        op: UnaryOp,
+        value: Reg,
+    },
+    Binary {
+        dest: Reg,
+        op: BinaryOp,
+        left: Reg,
+        right: Reg,
+    },
+    Construct {
+        dest: Reg,
+        tp: Type,
+        args: Vec<Reg>,
+    },
+    Call {
+        dest: Option<Reg>,
+        func: Func,
+        args: Vec<Reg>,
+    },
+    Member {
+        dest: Reg,
+        value: Reg,
+        mem: Member,
+    },
+    Int {
+        dest: Reg,
+        value: i32,
+    },
+}
+
+#[derive(Clone, Debug)]
 pub struct Term {
     pub kind: TermKind,
 }
@@ -229,14 +264,25 @@ impl TermKind {
 }
 
 #[derive(Copy, Clone, Debug)]
+pub struct Var {
+    pub index: Index,
+}
+
+impl fmt::Display for Var {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "v{}", self.index)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum Reg {
-    Local(Index),
+    Local { index: Index },
 }
 
 impl fmt::Display for Reg {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Reg::Local(idx) => write!(f, "r{}", idx),
+            Reg::Local { index } => write!(f, "r{}", index),
         }
     }
 }
