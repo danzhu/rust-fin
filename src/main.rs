@@ -4,6 +4,7 @@ mod token;
 mod ptree;
 mod ast;
 mod ir;
+mod llvm;
 mod ctx;
 
 mod parser;

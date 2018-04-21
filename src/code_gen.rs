@@ -1,200 +1,183 @@
-use std::{fmt, io, result};
-
 use common::*;
 use ast::*;
 use ir::*;
+use llvm;
 use ctx::*;
 
-pub fn generate<Out>(ctx: &Context, mut output: Out) -> Result<()>
-where
-    Out: io::Write,
-{
+pub fn generate(ctx: &Context) -> llvm::Module {
+    let mut items = Vec::new();
+
     for tp in &ctx.type_defs {
-        gen_type(ctx, tp, &mut output)?;
+        if let Some(tp) = gen_type(ctx, tp) {
+            items.push(llvm::Item {
+                kind: llvm::ItemKind::Type(tp),
+            });
+        }
     }
 
     for func in &ctx.func_defs {
-        if let Some(ir) = func.ir {
+        let kind = if let Some(ir) = func.ir {
             let ir = &ctx.irs[ir];
 
-            let mut gen = FuncGen {
-                output: &mut output,
-                ctx,
-                func,
-                ir,
-                temp: 0,
-            };
-            gen.gen()?;
+            let mut gen = FuncGen::new(ctx, func, ir);
+            gen.gen();
+            llvm::ItemKind::Define(gen.def)
         } else {
-            gen_extern(ctx, func, &mut output)?;
-        }
+            llvm::ItemKind::Declare(gen_decl(ctx, func))
+        };
+
+        items.push(llvm::Item { kind });
     }
-    Ok(())
+
+    llvm::Module { items }
 }
 
-fn gen_type<Out>(ctx: &Context, tp: &TypeDef, output: &mut Out) -> Result<()>
-where
-    Out: io::Write,
-{
+fn gen_type(ctx: &Context, tp: &TypeDef) -> Option<llvm::TypeDef> {
     match tp.kind {
         TypeDefKind::Struct { ref fields, .. } => {
             let name = typedef_name(tp);
-
-            write!(output, "{} = type {{ ", name)?;
-
-            let mut first = true;
-            for field in fields {
-                if first {
-                    first = false;
-                } else {
-                    write!(output, ", ")?;
-                }
-
-                write!(output, "{}", type_name(ctx, &field.tp))?;
-            }
-
-            writeln!(output, " }}")?;
-            writeln!(output)?;
+            let fields = fields
+                .iter()
+                .map(|field| type_name(ctx, &field.tp))
+                .collect();
+            Some(llvm::TypeDef {
+                name,
+                kind: llvm::TypeDefKind::Struct { fields },
+            })
         }
-        TypeDefKind::Builtin(_) => {}
+        TypeDefKind::Builtin(_) => None,
         TypeDefKind::Opaque => panic!("generating opaque type"),
     }
-    Ok(())
 }
 
-fn gen_extern<Out>(ctx: &Context, func: &FuncDef, output: &mut Out) -> Result<()>
-where
-    Out: io::Write,
-{
-    write!(output, "declare ")?;
-
-    gen_sig(ctx, func, output)?;
-
-    writeln!(output)?;
-    writeln!(output)?;
-
-    Ok(())
-}
-
-struct FuncGen<'a, Out>
-where
-    Out: 'a + io::Write,
-{
-    output: &'a mut Out,
+struct FuncGen<'a> {
     ctx: &'a Context,
     func: &'a FuncDef,
     ir: &'a Ir,
-    temp: usize,
+    def: llvm::FuncDef,
+    vars: Vec<llvm::Value>,
+    regs: Vec<llvm::Value>,
 }
 
-impl<'a, Out> FuncGen<'a, Out>
-where
-    Out: io::Write,
-{
-    fn gen(&mut self) -> Result<()> {
-        write!(self.output, "define ")?;
+impl<'a> FuncGen<'a> {
+    fn new(ctx: &'a Context, func: &'a FuncDef, ir: &'a Ir) -> Self {
+        let decl = gen_decl(ctx, func);
 
-        gen_sig(self.ctx, self.func, self.output)?;
+        let def = llvm::FuncDef::new(decl);
 
-        writeln!(self.output, " {{")?;
+        FuncGen {
+            ctx,
+            func,
+            ir,
+            def,
+            vars: Vec::new(),
+            regs: Vec::new(),
+        }
+    }
+
+    fn gen(&mut self) {
+        assert!(!self.ir.blocks.is_empty());
 
         let mut first = true;
-        for (i, block) in self.ir.blocks.iter().enumerate() {
+        for block in &self.ir.blocks {
+            let mut bb = self.def.add_block();
+
             if first {
-                writeln!(self.output, "; variables")?;
-                for (idx, var) in self.ir.vars.iter().enumerate() {
-                    let tp = type_name(self.ctx, &var.tp);
-                    let index = Index::new(idx);
-                    let reg = Value::Var(Var { index });
-
-                    self.exec(format_args!("{} = alloca {}", reg, tp))?;
-                }
-
-                writeln!(self.output, "; registers")?;
-                for (idx, reg) in self.ir.regs.iter().enumerate() {
-                    let tp = type_name(self.ctx, &reg.tp);
-                    let reg = Value::Reg(Reg::Local {
-                        index: Index::new(idx),
-                    });
-
-                    self.exec(format_args!("{} = alloca {}", reg, tp))?;
-                }
-
                 first = false;
-            } else {
-                writeln!(self.output)?;
-                let index = Index::new(i);
-                writeln!(self.output, "{}:", Block { index })?;
+
+                self.def.comment(bb, "variables");
+                self.vars = self.ir
+                    .vars
+                    .iter()
+                    .map(|var| {
+                        let tp = type_name(self.ctx, &var.tp);
+                        self.def.write(bb, llvm::InstrKind::Alloca { tp })
+                    })
+                    .collect();
+
+                self.def.comment(bb, "registers");
+                self.regs = self.ir
+                    .regs
+                    .iter()
+                    .map(|reg| {
+                        let tp = type_name(self.ctx, &reg.tp);
+                        self.def.write(bb, llvm::InstrKind::Alloca { tp })
+                    })
+                    .collect();
             }
 
             for stmt in &block.stmts {
-                self.gen_stmt(stmt)?;
+                self.gen_stmt(stmt, bb);
             }
-            self.gen_term(&block.term)?;
-        }
 
-        writeln!(self.output, "}}")?;
-        writeln!(self.output)?;
-        Ok(())
+            self.gen_term(&block.term, bb);
+        }
     }
 
-    fn gen_stmt(&mut self, stmt: &Stmt) -> Result<()> {
-        write!(self.output, "; ")?;
-        stmt.print(self.output, self.ctx)?;
-        writeln!(self.output)?;
-
+    fn gen_stmt(&mut self, stmt: &Stmt, bb: llvm::Block) {
         match stmt.kind {
             StmtKind::Param { dest, param } => {
                 let def = &self.func.params[param];
                 let tp = type_name(self.ctx, &def.tp);
+                let value = llvm::Value::Param(param.value());
+                let addr = self.reg_addr(dest);
 
-                self.exec(format_args!(
-                    "store {} {}, {}* {}",
-                    tp,
-                    Value::Param(param.value()),
-                    tp,
-                    Value::Reg(dest),
-                ))?;
+                let instr = llvm::InstrKind::Store { tp, value, addr };
+
+                self.def.write(bb, instr);
             }
             StmtKind::Var { dest, var } => {
                 let def = &self.ir.vars[var.index];
-                let tp = type_name(self.ctx, &def.tp);
+                let tp = llvm::Type::Pointer(Box::new(type_name(self.ctx, &def.tp)));
+                let value = self.vars[var.index.value()].clone();
+                let addr = self.reg_addr(dest);
 
-                self.exec(format_args!(
-                    "store {}* {}, {}** {}",
-                    tp,
-                    Value::Var(var),
-                    tp,
-                    Value::Reg(dest),
-                ))?;
+                let instr = llvm::InstrKind::Store { tp, value, addr };
+
+                self.def.write(bb, instr);
             }
             StmtKind::Move { dest, value } => {
-                let val = self.load(value)?;
-                self.store(val, dest)?;
+                let val = self.load(value, bb);
+                self.store(val, dest, bb);
             }
             StmtKind::Load { dest, value } => {
                 let tp = self.reg_type(dest);
-                let value = self.load(value)?;
+                let addr = self.load(value, bb);
 
-                let val = self.write(format_args!("load {}, {}* {}", tp, tp, value,))?;
-                self.store(val, dest)?;
+                let instr = llvm::InstrKind::Load { tp, addr };
+                let res = self.def.write(bb, instr);
+
+                self.store(res, dest, bb);
             }
             StmtKind::Store { value, var } => {
                 let tp = self.reg_type(value);
-                let value = self.load(value)?;
-                let var = self.load(var)?;
+                let value = self.load(value, bb);
+                let addr = self.load(var, bb);
 
-                self.exec(format_args!("store {} {}, {}* {}", tp, value, tp, var,))?;
+                let instr = llvm::InstrKind::Store { tp, value, addr };
+                self.def.write(bb, instr);
             }
             StmtKind::Unary { dest, op, value } => {
                 let tp = self.reg_type(value);
-                let value = self.load(value)?;
+                let value = self.load(value, bb);
 
-                let val = match op {
-                    UnaryOp::Neg => self.write(format_args!("sub {} 0, {}", tp, value))?,
-                    UnaryOp::Not => self.write(format_args!("xor {} {}, true", tp, value))?,
+                let instr = match op {
+                    UnaryOp::Neg => llvm::InstrKind::Arith {
+                        op: llvm::ArithOp::Sub,
+                        tp,
+                        left: llvm::Value::Int(0),
+                        right: value,
+                    },
+                    UnaryOp::Not => llvm::InstrKind::Arith {
+                        op: llvm::ArithOp::Xor,
+                        tp,
+                        left: value,
+                        right: llvm::Value::Bool(true),
+                    },
                 };
-                self.store(val, dest)?;
+                let val = self.def.write(bb, instr);
+
+                self.store(val, dest, bb);
             }
             StmtKind::Binary {
                 dest,
@@ -203,49 +186,66 @@ where
                 right,
             } => {
                 let tp = self.reg_type(left);
-                let left = self.load(left)?;
-                let right = self.load(right)?;
+                let left = self.load(left, bb);
+                let right = self.load(right, bb);
 
-                let op = match op {
-                    BinaryOp::Arith(op) => match op {
-                        ArithOp::Add => "add",
-                        ArithOp::Sub => "sub",
-                        ArithOp::Mul => "mul",
-                        ArithOp::Div => "sdiv",
-                        ArithOp::Mod => "srem",
-                    }.to_string(),
-                    BinaryOp::Comp(op) => {
-                        "icmp ".to_string() + match op {
-                            CompOp::Eq => "eq",
-                            CompOp::Ne => "ne",
-                            CompOp::Lt => "slt",
-                            CompOp::Gt => "sgt",
-                        }
-                    }
+                let instr = match op {
+                    BinaryOp::Arith(op) => llvm::InstrKind::Arith {
+                        op: match op {
+                            ArithOp::Add => llvm::ArithOp::Add,
+                            ArithOp::Sub => llvm::ArithOp::Sub,
+                            ArithOp::Mul => llvm::ArithOp::Mul,
+                            ArithOp::Div => llvm::ArithOp::Sdiv,
+                            ArithOp::Mod => llvm::ArithOp::Srem,
+                        },
+                        tp,
+                        left,
+                        right,
+                    },
+                    BinaryOp::Comp(op) => llvm::InstrKind::Icmp {
+                        op: match op {
+                            CompOp::Eq => llvm::IcmpOp::Eq,
+                            CompOp::Ne => llvm::IcmpOp::Ne,
+                            CompOp::Lt => llvm::IcmpOp::Slt,
+                            CompOp::Gt => llvm::IcmpOp::Sgt,
+                        },
+                        tp,
+                        left,
+                        right,
+                    },
                 };
+                let val = self.def.write(bb, instr);
 
-                let val = self.write(format_args!("{} {} {}, {}", op, tp, left, right))?;
-                self.store(val, dest)?;
+                self.store(val, dest, bb);
             }
             StmtKind::Construct {
                 dest,
                 ref tp,
                 ref args,
             } => {
-                let dest = self.addr(dest);
+                let dest = self.reg_addr(dest);
                 let tp = type_name(self.ctx, tp);
 
                 for (idx, &arg) in args.iter().enumerate() {
                     let arg_tp = self.reg_type(arg);
-                    let arg = self.load(arg)?;
-                    let field = self.write(format_args!(
-                        "getelementptr {}, {}* {}, i64 0, i32 {}",
-                        tp, tp, dest, idx
-                    ))?;
-                    self.exec(format_args!(
-                        "store {} {}, {}* {}",
-                        arg_tp, arg, arg_tp, field
-                    ))?;
+                    let arg = self.load(arg, bb);
+
+                    let instr = llvm::InstrKind::GetElementPtr {
+                        tp: tp.clone(),
+                        ptr: dest.clone(),
+                        offsets: vec![
+                            (llvm::Type::Builtin("i64"), llvm::Value::Int(0)),
+                            (llvm::Type::Builtin("i32"), llvm::Value::Int(idx as i32)),
+                        ],
+                    };
+                    let field = self.def.write(bb, instr);
+
+                    let instr = llvm::InstrKind::Store {
+                        tp: arg_tp,
+                        value: arg,
+                        addr: field,
+                    };
+                    self.def.write(bb, instr);
                 }
             }
             StmtKind::Call {
@@ -254,24 +254,22 @@ where
                 ref args,
             } => {
                 let func = &self.ctx.get_func(func);
-                let name = Value::Func(func.path.clone());
+                let name = llvm::Value::Func(func.path.to_string());
                 let tp = type_name(self.ctx, &func.ret);
 
                 let args = args.iter()
                     .map(|&arg| {
                         let tp = self.reg_type(arg);
-                        let val = self.load(arg)?;
-                        Ok(format!("{} {}", tp, val))
+                        let val = self.load(arg, bb);
+                        (tp, val)
                     })
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect();
+
+                let instr = llvm::InstrKind::Call { tp, name, args };
+                let val = self.def.write(bb, instr);
 
                 if let Some(dest) = dest {
-                    let val =
-                        self.write(format_args!("call {} {}({})", tp, name, args.join(", ")))?;
-
-                    self.store(val, dest)?;
-                } else {
-                    self.exec(format_args!("call {} {}({})", tp, name, args.join(", ")))?;
+                    self.store(val, dest, bb);
                 }
             }
             StmtKind::Member {
@@ -282,203 +280,143 @@ where
                 let mem_tp = self.reg_type(dest);
                 let idx = mem.index.value();
                 let tp = self.reg_type(value);
-                let value = self.addr(value);
-                let field = self.write(format_args!(
-                    "getelementptr {}, {}* {}, i64 0, i32 {}",
-                    tp, tp, value, idx
-                ))?;
+                let value = self.reg_addr(value);
 
-                let val = self.write(format_args!("load {}, {}* {}", mem_tp, mem_tp, field))?;
-                self.store(val, dest)?;
+                let instr = llvm::InstrKind::GetElementPtr {
+                    tp,
+                    ptr: value,
+                    offsets: vec![
+                        (llvm::Type::Builtin("i64"), llvm::Value::Int(0)),
+                        (llvm::Type::Builtin("i32"), llvm::Value::Int(idx as i32)),
+                    ],
+                };
+                let field = self.def.write(bb, instr);
+
+                let instr = llvm::InstrKind::Load {
+                    tp: mem_tp,
+                    addr: field,
+                };
+                let val = self.def.write(bb, instr);
+
+                self.store(val, dest, bb);
             }
             StmtKind::Int { dest, value } => {
                 let tp = self.reg_type(dest);
-                let dest = self.addr(dest);
-                self.exec(format_args!("store {} {}, {}* {}", tp, value, tp, dest))?;
+                let value = llvm::Value::Int(value);
+                let addr = self.reg_addr(dest);
+
+                let instr = llvm::InstrKind::Store { tp, value, addr };
+                self.def.write(bb, instr);
             }
         }
-        Ok(())
     }
 
-    fn gen_term(&mut self, term: &Term) -> Result<()> {
-        write!(self.output, "; ")?;
-        term.print(self.output, self.ctx)?;
-        writeln!(self.output)?;
-
+    fn gen_term(&mut self, term: &Term, bb: llvm::Block) {
         match term.kind {
             TermKind::Br { cond, succ, fail } => {
-                let tp = self.reg_type(cond);
-                let cond = self.load(cond)?;
+                let cond = self.load(cond, bb);
                 let succ = self.label(succ);
                 let fail = self.label(fail);
 
-                self.exec(format_args!(
-                    "br {} {}, label {}, label {}",
-                    tp, cond, succ, fail
-                ))?;
+                let instr = llvm::TermKind::BrCond { cond, succ, fail };
+                self.def.end(bb, instr);
             }
             TermKind::Jump { block } => {
                 let block = self.label(block);
 
-                self.exec(format_args!("br label {}", block))?;
+                let instr = llvm::TermKind::Br { block };
+                self.def.end(bb, instr);
             }
             TermKind::Ret { value: Some(value) } => {
                 let tp = self.reg_type(value);
-                let value = self.load(value)?;
+                let value = self.load(value, bb);
 
-                self.exec(format_args!("ret {} {}", tp, value))?;
+                let instr = llvm::TermKind::RetVal { tp, value };
+                self.def.end(bb, instr);
             }
             TermKind::Ret { value: None } => {
-                self.exec(format_args!("ret void"))?;
+                let instr = llvm::TermKind::Ret;
+                self.def.end(bb, instr);
             }
             TermKind::Unreachable => {
-                self.exec(format_args!("unreachable"))?;
+                let instr = llvm::TermKind::Unreachable;
+                self.def.end(bb, instr);
             }
         }
-        Ok(())
     }
 
-    fn addr(&mut self, reg: Reg) -> Value {
-        Value::Reg(reg)
+    fn load(&mut self, reg: Reg, bb: llvm::Block) -> llvm::Value {
+        let addr = self.reg_addr(reg);
+        let tp = self.reg_type(reg);
+
+        let instr = llvm::InstrKind::Load { tp, addr };
+        self.def.write(bb, instr)
     }
 
-    fn load(&mut self, reg: Reg) -> Result<Value> {
-        let tp = match reg {
-            Reg::Local { index } => type_name(self.ctx, &self.ir.regs[index].tp),
-        };
+    fn store(&mut self, value: llvm::Value, reg: Reg, bb: llvm::Block) {
+        let addr = self.reg_addr(reg);
+        let tp = self.reg_type(reg);
 
-        self.write(format_args!("load {}, {}* {}", tp, tp, Value::Reg(reg),))
+        let instr = llvm::InstrKind::Store { tp, value, addr };
+        self.def.write(bb, instr);
     }
 
-    fn store(&mut self, val: Value, reg: Reg) -> Result<()> {
-        let tp = match reg {
-            Reg::Local { index } => type_name(self.ctx, &self.ir.regs[index].tp),
-        };
-
-        self.exec(format_args!(
-            "store {} {}, {}* {}",
-            tp,
-            val,
-            tp,
-            Value::Reg(reg),
-        ))
+    fn reg_addr(&self, reg: Reg) -> llvm::Value {
+        match reg {
+            Reg::Local { index } => self.regs[index.value()].clone(),
+        }
     }
 
-    fn write(&mut self, args: fmt::Arguments) -> Result<Value> {
-        let val = self.temp();
-        writeln!(self.output, "{}{} = {}", INDENT, val, args)?;
-        Ok(val)
-    }
-
-    fn exec(&mut self, args: fmt::Arguments) -> Result<()> {
-        writeln!(self.output, "{}{}", INDENT, args)?;
-        Ok(())
-    }
-
-    fn temp(&mut self) -> Value {
-        let res = Value::Temp(self.temp);
-        self.temp += 1;
-        res
-    }
-
-    fn label(&self, block: Block) -> Value {
-        Value::Block(block)
-    }
-
-    fn reg_type(&self, reg: Reg) -> String {
+    fn reg_type(&self, reg: Reg) -> llvm::Type {
         match reg {
             Reg::Local { index } => type_name(self.ctx, &self.ir.regs[index].tp),
         }
     }
+
+    fn label(&self, block: Block) -> llvm::Block {
+        llvm::Block {
+            index: block.index.value(),
+        }
+    }
 }
 
-fn gen_sig<Out>(ctx: &Context, func: &FuncDef, output: &mut Out) -> Result<()>
-where
-    Out: io::Write,
-{
-    let name = Value::Func(func.path.clone());
+fn gen_decl(ctx: &Context, func: &FuncDef) -> llvm::FuncDecl {
+    let name = llvm::Value::Func(func.path.to_string());
     let ret = type_name(ctx, &func.ret);
 
-    write!(output, "{} {}(", ret, name)?;
+    let params = func.params
+        .iter()
+        .enumerate()
+        .map(|(idx, param)| {
+            let tp = type_name(ctx, &param.tp);
+            llvm::ParamDef {
+                name: llvm::Value::Param(idx),
+                tp,
+            }
+        })
+        .collect();
 
-    let mut first = true;
-    for (idx, param) in func.params.iter().enumerate() {
-        if first {
-            first = false;
-        } else {
-            write!(output, ", ")?;
-        }
-
-        let tp = type_name(ctx, &param.tp);
-        write!(output, "{} {}", tp, Value::Param(idx))?;
-    }
-
-    write!(output, ")")?;
-
-    Ok(())
+    llvm::FuncDecl { name, ret, params }
 }
 
-fn type_name(ctx: &Context, tp: &Type) -> String {
+fn type_name(ctx: &Context, tp: &Type) -> llvm::Type {
     match tp.kind {
         TypeKind::Named { index } => {
             let def = &ctx.type_defs[index];
             typedef_name(def)
         }
-        TypeKind::Ref { ref tp } => format!("{}*", type_name(ctx, tp)),
-        TypeKind::Void => "void".to_string(),
+        TypeKind::Ref { ref tp } => llvm::Type::Pointer(Box::new(type_name(ctx, tp))),
+        TypeKind::Void => llvm::Type::Void,
     }
 }
 
-fn typedef_name(tp: &TypeDef) -> String {
+fn typedef_name(tp: &TypeDef) -> llvm::Type {
     match tp.kind {
-        TypeDefKind::Struct { .. } => format!("%{}", tp.path),
-        TypeDefKind::Builtin(ref tp) => match *tp {
+        TypeDefKind::Struct { .. } => llvm::Type::Identified(tp.path.to_string()),
+        TypeDefKind::Builtin(ref tp) => llvm::Type::Builtin(match *tp {
             BuiltinType::Int => "i32",
             BuiltinType::Bool => "i1",
-        }.to_string(),
+        }),
         TypeDefKind::Opaque => panic!("getting name of opaque type"),
     }
 }
-
-#[derive(Clone)]
-enum Value {
-    Func(Path),
-    Block(Block),
-    Reg(Reg),
-    Var(Var),
-    Param(usize),
-    Temp(usize),
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Value::Func(ref name) => write!(f, "@{}", name),
-            Value::Block(ref lab) => write!(f, "%{}", lab),
-            Value::Reg(idx) => write!(f, "%_{}", idx),
-            Value::Var(idx) => write!(f, "%_{}", idx),
-            Value::Param(idx) => write!(f, "%_p{}", idx),
-            Value::Temp(idx) => write!(f, "%_t{}", idx),
-        }
-    }
-}
-
-pub enum Error {
-    Io(io::Error),
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Self {
-        Error::Io(err)
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Io(ref err) => write!(f, "{}", err),
-        }
-    }
-}
-
-pub type Result<T> = result::Result<T, Error>;

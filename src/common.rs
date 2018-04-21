@@ -144,7 +144,7 @@ impl<T> List<T> {
     }
 
     pub fn push(&mut self, item: T) -> Index {
-        let idx = Index(self.items.len());
+        let idx = Index::new(self.items.len());
         self.items.push(item);
         idx
     }
@@ -168,13 +168,13 @@ impl<T> ops::Index<Index> for List<T> {
     type Output = T;
 
     fn index(&self, idx: Index) -> &Self::Output {
-        &self.items[idx.0]
+        &self.items[idx.value()]
     }
 }
 
 impl<T> ops::IndexMut<Index> for List<T> {
     fn index_mut(&mut self, idx: Index) -> &mut Self::Output {
-        &mut self.items[idx.0]
+        &mut self.items[idx.value()]
     }
 }
 
@@ -197,20 +197,22 @@ impl<'a, T> IntoIterator for &'a mut List<T> {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Index(usize);
+pub struct Index {
+    value: usize,
+}
 
 impl Index {
-    pub fn new(idx: usize) -> Self {
-        Index(idx)
+    pub fn new(value: usize) -> Self {
+        Index { value }
     }
 
     pub fn value(&self) -> usize {
-        self.0
+        self.value
     }
 }
 
 impl fmt::Display for Index {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.value)
     }
 }

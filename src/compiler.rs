@@ -16,7 +16,6 @@ pub enum Error {
     Io(io::Error),
     Parser(parser::Error),
     AstGen(ast_gen::Error),
-    CodeGen(code_gen::Error),
 }
 
 pub type Result = result::Result<(), Error>;
@@ -39,12 +38,6 @@ impl From<ast_gen::Error> for Error {
     }
 }
 
-impl From<code_gen::Error> for Error {
-    fn from(err: code_gen::Error) -> Error {
-        Error::CodeGen(err)
-    }
-}
-
 impl Compiler {
     pub fn new() -> Self {
         Self {
@@ -52,7 +45,7 @@ impl Compiler {
         }
     }
 
-    pub fn compile<In, Out>(&mut self, mut input: In, output: Out) -> Result
+    pub fn compile<In, Out>(&mut self, mut input: In, mut output: Out) -> Result
     where
         In: io::Read,
         Out: io::Write,
@@ -69,7 +62,9 @@ impl Compiler {
             .print(&mut io::stderr())
             .expect("failed to dump context");
 
-        code_gen::generate(&self.ctx, output)?;
+        let module = code_gen::generate(&self.ctx);
+
+        write!(output, "{}", module)?;
 
         Ok(())
     }
@@ -82,7 +77,6 @@ impl Compiler {
             Error::Io(ref err) => write!(output, "{}", err),
             Error::Parser(ref err) => err.print(output, &self.ctx),
             Error::AstGen(ref err) => err.print(output, &self.ctx),
-            Error::CodeGen(ref err) => write!(output, "{}", err),
         }
     }
 }
