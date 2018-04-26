@@ -1,17 +1,17 @@
-mod common;
-mod error;
-mod token;
-mod ptree;
 mod ast;
+mod common;
+mod ctx;
+mod error;
 mod ir;
 mod llvm;
-mod ctx;
+mod ptree;
+mod token;
 
-mod parser;
 mod ast_gen;
-mod ir_gen;
 mod code_gen;
 mod compiler;
+mod ir_gen;
+mod parser;
 
 use std::{io, process};
 

@@ -2,6 +2,10 @@ extern getchar -> Int
 
 extern putchar ch Int -> Int
 
+extern islower ch Int -> Int
+
+extern toupper ch Int -> Int
+
 struct Vec as
     x Int
     y Int
@@ -21,18 +25,20 @@ def fib n Int -> Int as
     .
 .
 
-def encrypt shift Int as
+def cap as
     let Int -> ch,
     'getchar = ch,
     if *ch != -1 then
-        *ch + shift = ch,
+        if 'islower *ch != 0 then
+            'toupper *ch = ch
+        .,
         'putchar *ch,
-        'encrypt shift
+        'cap
     .
 .
 
 def main -> Int as
-    'encrypt 1,
+    'cap,
     'Vec 3 4 -> v,
     if 'len v -> i, !(i < 0) then
         'fib i

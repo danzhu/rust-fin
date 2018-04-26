@@ -1,12 +1,12 @@
 use std::{io, result};
 
-use error::*;
 use ctx::*;
+use error::*;
 
-use parser;
 use ast_gen;
-use ir_gen;
 use code_gen;
+use ir_gen;
+use parser;
 
 pub struct Compiler {
     ctx: Context,

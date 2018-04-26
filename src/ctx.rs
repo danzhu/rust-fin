@@ -1,11 +1,11 @@
-use std::io;
 use std::collections::HashMap;
+use std::io;
 
+use ast::*;
 use common::*;
 use error::*;
-use ptree::*;
-use ast::*;
 use ir::*;
+use ptree::*;
 
 pub struct Context {
     pub sources: List<SourceNode>,
@@ -27,7 +27,7 @@ pub struct Context {
 impl Context {
     pub fn new() -> Self {
         macro_rules! define_tp {
-            ($ctx: expr, $src: expr, $name: ident) => {{
+            ($ctx:expr, $src:expr, $name:ident) => {{
                 let span = Span::zero($src);
                 let kind = TypeDefKind::Builtin(BuiltinType::$name);
                 let name = stringify!($name).to_string();

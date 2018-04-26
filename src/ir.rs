@@ -1,7 +1,7 @@
 use std::{fmt, io};
 
-use common::*;
 use ast::*;
+use common::*;
 use ctx::*;
 
 #[derive(Clone, Debug)]

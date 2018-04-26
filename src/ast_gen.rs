@@ -1,16 +1,16 @@
-use std::{io, result};
 use std::collections::HashMap;
+use std::{io, result};
 
+use ast::*;
 use common::*;
+use ctx::*;
 use error::*;
 use ptree::*;
-use ast::*;
-use ctx::*;
 
 type RefTable = Context;
 
 macro_rules! declare_sym {
-    ($ctx: expr, $def: expr, $defs: ident, $kind: ident) => {
+    ($ctx:expr, $def:expr, $defs:ident, $kind:ident) => {
         let def = $def;
         if $ctx.sym_table.contains_key(&def.path.name) {
             return Err(Error {
@@ -28,7 +28,7 @@ macro_rules! declare_sym {
 }
 
 macro_rules! resolve_path {
-    ($ctx: expr, $rf: expr, $kind: ident) => {{
+    ($ctx:expr, $rf:expr, $kind:ident) => {{
         let ctx: &Context = $ctx;
         let rf = $rf;
         match ctx.get_sym(&rf.path.name) {

@@ -1,9 +1,9 @@
-use std::io;
 use std::collections::HashMap;
+use std::io;
 
 use common::*;
-use error::*;
 use ctx::*;
+use error::*;
 
 #[derive(Clone, Debug)]
 pub struct TypeDef {

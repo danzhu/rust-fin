@@ -1,8 +1,8 @@
-use common::*;
 use ast::*;
+use common::*;
+use ctx::*;
 use ir::*;
 use llvm;
-use ctx::*;
 
 pub fn generate(ctx: &Context) -> llvm::Module {
     let mut items = Vec::new();

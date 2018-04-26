@@ -1,7 +1,7 @@
-use common::*;
 use ast::*;
-use ir::*;
+use common::*;
 use ctx::*;
+use ir::*;
 
 const NO_REG: &str = "no register";
 

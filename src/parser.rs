@@ -1,13 +1,13 @@
 use std::{io, iter, num, result};
 
 use common::*;
-use error::*;
-use token::*;
-use ptree::*;
 use ctx::*;
+use error::*;
+use ptree::*;
+use token::*;
 
 macro_rules! expect {
-    ($self: expr, $pat: ident) => {
+    ($self:expr, $pat:ident) => {
         match $self.next() {
             Some(TokenKind::$pat) => {}
             got => {
@@ -21,7 +21,7 @@ macro_rules! expect {
 }
 
 macro_rules! expect_value {
-    ($self: expr, $pat: ident) => {
+    ($self:expr, $pat:ident) => {
         match $self.next() {
             Some(TokenKind::$pat(val)) => val,
             got => {
